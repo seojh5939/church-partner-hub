@@ -1,7 +1,8 @@
-# [Implementation Plan] church-partner-hub 구현 계획서
+# 📋 [요구사항 정의 및 개발 계획서] church-partner-hub
 
-> **문서 상태:** 승인 대기 / 실행 준비 완료  
-> **기준 설계:** [design-church-partner-hub.md](file:///C:/Users/20260602/Documents/github/church-partner-hub/docs/plans/designs/design-church-partner-hub.md)  
+> **문서 버전:** v1.1.0  
+> **상위 기획안:** [product-specification.md](file:///C:/Users/20260602/Documents/github/church-partner-hub/docs/plans/product-specification.md)  
+> **설계 지침서:** [technical-architecture-guide.md](file:///C:/Users/20260602/Documents/github/church-partner-hub/docs/plans/technical-architecture-guide.md)  
 > **프로젝트 루트:** `C:\Users\20260602\Documents\github\church-partner-hub`
 
 ---
@@ -12,6 +13,7 @@
 3. 회사 요구 시 신속한 대응을 위한 **공문/선물 발송 퀵서처(원클릭 복사)**
 4. 팀원/본부 범용 기본 모드 + 개인용 **옵시디언 스마트 동기화(Diff 대조, 상호보완)**
 5. 윈도우 환경 무설치 **단일 포터블 `.exe` (PyInstaller + pywebview)**
+
 
 ---
 
