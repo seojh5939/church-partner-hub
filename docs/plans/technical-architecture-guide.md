@@ -83,9 +83,49 @@ church-partner-hub/
 
 ---
 
-## 2. 데이터 모델 명세 (Data Models)
+## 2. 개발 엔지니어링 원칙 및 구현 표준 (Engineering Principles)
 
-### 2.1 `ChurchRecord` (마스터 레코드 - 내부 기획자용)
+### 2.1 S.O.L.I.D 객체지향 설계 원칙
+본 프로젝트는 유지보수성과 테스트 용이성을 극대화하기 위해 S.O.L.I.D 5대 원칙을 철저히 준수하여 개발한다:
+
+1. **S (Single Responsibility Principle - 단일 책임 원칙)**:
+   - 각 클래스와 모듈은 **오직 하나의 명확한 책임(변경의 이유)**만을 가진다.
+   - `ExcelEngine`은 엑셀 파일 읽기/쓰기 및 서식 보존만 책임지며, 웹 크롤링이나 통계 로직을 포함하지 않는다.
+   - `AddressGrounder`는 1차 도로명 주소 탐색만, `HomepageGrounder`는 웹사이트 주소 교차 검증만, `AnalyticsEngine`은 교세 집계만, `DispatchManager`는 클립보드 포맷 변환만 독립적으로 수행한다.
+   - UI 셸 및 IPC 레이어(`bridge.py`)는 오직 통신 중계와 데이터 직렬화만 담당하고 코어 비즈니스 로직을 포함하지 않는다.
+2. **O (Open/Closed Principle - 개방-폐쇄 원칙)**:
+   - **확장에는 열려 있고(Open), 기존 코드 수정에는 닫혀(Closed)** 있어야 한다.
+   - 외부 검색 공급자(네이버 플레이스, 카카오 로컬 등)나 파일 내보내기 형식(TSV, CSV, XLSX) 추가 시, 기존 비즈니스 로직을 수정하지 않고 전략(Strategy)/어댑터 인터페이스를 통해 독립 클래스로 확장할 수 있도록 설계한다.
+3. **L (Liskov Substitution Principle - 리스코프 치환 원칙)**:
+   - 상위 인터페이스 규약을 준수하는 모든 하위 구현체는 부작용 없이 상호 교체 가능해야 한다.
+   - 단위 테스트용 모의 객체(`MockGrounder`)와 실제 웹 크롤러(`WebGrounder`)가 동일한 계약(Contract)을 보장하여 테스트와 실환경 간 교체 가능성을 100% 유지한다.
+4. **I (Interface Segregation Principle - 인터페이스 분리 원칙)**:
+   - 클라이언트(UI 탭, 외부 모듈)가 자신이 사용하지 않는 거대한 범용 인터페이스에 의존하지 않도록 분리한다.
+   - 간편 주소록 모드 클라이언트는 옵시디언 동기화나 17개 복잡한 사역 관리 메서드를 알 필요 없이, 단순 입출력에 특화된 경량 API 규격만 소비한다.
+5. **D (Dependency Inversion Principle - 의존 역전 원칙)**:
+   - 고수준 모듈(비즈니스 유스케이스, `bridge.py`)은 저수준 세부 구현체(특정 웹 라이브러리, 특정 파일 IO 패키지)에 직접 결합되지 않고 추상화(인터페이스/프로토콜)에 의존한다.
+   - 의존성 주입(Dependency Injection) 또는 팩토리 패턴을 적용하여 결합도를 낮추고 단위 테스트 격리성을 확보한다.
+
+### 2.2 YAGNI (You Aren't Gonna Need It) 원칙
+* **"지금 당장 필요한 기능만 고려하여 작성하기"**:
+  * "나중에 필요할지도 모른다"는 막연한 추측과 상상에 기반한 불필요한 기능, 사용되지 않는 메서드/매개변수, 가상의 플러그인 아키텍처, 거대한 프레임워크성 추상화를 사전에 구현하지 않는다.
+  * 오직 현재 확정된 기획안(2단계 주소·홈페이지 종속 검증, 이원화 모드 분기, 5단계 교세 세그먼트, 원클릭 퀵서치, 옵시디언 동기화)을 만족하는 **가장 간결하고 직관적인 최소 실행 가능 코드(KISS)**를 작성한다.
+
+### 2.3 실용적 확장성 (Pragmatic Extensibility: 2~3회 변경 대응 버퍼)
+* **"2~3회 정도의 수정/변경이 들어오는 것에 무리 없이 대응할 수 있는 수준까지만 설계하기"**:
+  * 무한한 미래의 변경을 모두 수용하려는 과잉 엔지니어링(Over-engineering)을 철저히 배제한다.
+  * 실무에서 빈번히 발생하는 **2~3회 수준의 요구사항 변화**에 안정적으로 대응할 수 있는 담백한 유연성 버퍼만 확보한다:
+    - 엑셀 컬럼 1~2개 추가 또는 컬럼명/순서 변경에 유연한 딕셔너리/데이터클래스 매핑
+    - 웹 검색 대상 사이트의 HTML 구조/셀렉터 변경 시 파서 함수만 교체할 수 있는 구조
+    - 신뢰도 판정 기준 점수(90%, 70%) 및 5단계 교세 구간 임계값의 설정 분리
+    - 퀵서치 클립보드 출력 텍스트 템플릿의 2~3차 문구 수정 대응
+  * 3단계를 넘어선 대규모 구조적 변화는 실제로 필요가 발생했을 때 점진적 리팩토링으로 대처한다.
+
+---
+
+## 3. 데이터 모델 명세 (Data Models)
+
+### 3.1 `ChurchRecord` (마스터 레코드 - 내부 기획자용)
 ```python
 from dataclasses import dataclass, field
 from typing import Optional, List
@@ -180,7 +220,7 @@ def classify_church_scale(size: Optional[int]) -> str:
 
 ---
 
-## 3. IPC 통신 인터페이스 규격 (`pywebview.api`)
+## 4. IPC 통신 인터페이스 규격 (`pywebview.api`)
 
 프론트엔드 자바스크립트는 `window.pywebview.api.<method>(...)` 형태로 비동기 호출하며, 모든 응답은 `{ "success": bool, "data": ..., "error": str }` 공통 포맷을 준수한다.
 
@@ -237,7 +277,7 @@ def classify_church_scale(size: Optional[int]) -> str:
 
 ---
 
-## 4. 예외 처리 및 기술 안전 지침 (Safety Guidelines)
+## 5. 예외 처리 및 기술 안전 지침 (Safety Guidelines)
 
 1. **파일 락(PermissionError) 방지**:
    * 엑셀 저장 시 `~$`로 시작하는 잠금 파일 존재 여부를 먼저 확인.
@@ -289,7 +329,7 @@ def classify_church_scale(size: Optional[int]) -> str:
 
 ---
 
-## 5. 빌드 및 패키징 가이드라인 (Packaging Specification)
+## 6. 빌드 및 패키징 가이드라인 (Packaging Specification)
 
 * **도구**: `PyInstaller` (단일 파일 모드: `--onefile --noconsole`)
 * **프론트엔드 에셋**: `src/ui/` 디렉토리를 바이너리 내부 리소스(`sys._MEIPASS`)로 안전하게 번들링.
