@@ -43,13 +43,14 @@
 
 ## 🗓️ 단계별 구현 마일스톤 (Milestones)
 
-### Phase 1: 기반 구조 및 데스크톱 UI 셸 구축
-- [ ] Python 패키지 의존성 정의 (`requirements.txt`: `pywebview`, `pandas`, `openpyxl`, `beautifulsoup4`, `requests`, `pyinstaller`)
-- [ ] `pywebview` 기반 데스크톱 네이티브 윈도우 러너 (`src/main.py`)
-- [ ] 모던 반응형 프론트엔드 뷰 (`src/ui/`):
+### Phase 1: 기반 구조 및 데스크톱 UI 셸 구축 (완료)
+- [x] Python 패키지 의존성 정의 (`requirements.txt`: `pywebview`, `pandas`, `openpyxl`, `beautifulsoup4`, `requests`, `pyinstaller`)
+- [x] `pywebview` 기반 데스크톱 네이티브 윈도우 러너 (`src/main.py`)
+- [x] 모던 반응형 프론트엔드 뷰 (`src/ui/`):
   - 상단 작업 모드 전환 토글 (마스터 관리 모드 ⇋ 간편 주소록 모드)
   - 대시보드 탭, 주소/홈페이지 검증 탭, 퀵서치 탭, 교세분석 탭, 설정 탭
-- [ ] Python 백엔드 ↔ JS 프론트엔드 간 양방향 IPC 통신 브릿지 (`src/bridge.py`)
+- [x] Python 백엔드 ↔ JS 프론트엔드 간 양방향 IPC 통신 브릿지 (`src/bridge.py`)
+- [x] Phase 1 단위 테스트 및 Smoke 테스트 통과 (`tests/test_models.py`, `tests/test_bridge.py`)
 
 ### Phase 2: 이원화 엑셀 엔진 & 공문/선물 퀵서처
 - [ ] `ExcelEngine` 구현 (`src/core/excel_engine.py`):
