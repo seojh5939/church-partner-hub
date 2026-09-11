@@ -1,0 +1,98 @@
+name: CD - Auto Release on Version Bump
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-release:
+    name: Check Version & Publish GitHub Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install packaging
+
+      - name: Inspect Version and Determine Release
+        id: version_check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - << 'EOF'
+          import re
+          import os
+          import subprocess
+          import sys
+          from packaging import version
+
+          # 1. Read current version from src/__init__.py
+          with open("src/__init__.py", "r", encoding="utf-8") as f:
+              content = f.read()
+          match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', content)
+          if not match:
+              print("::error::Could not find __version__ in src/__init__.py")
+              sys.exit(1)
+          current_ver_str = match.group(1).lstrip("v")
+          current_ver = version.parse(current_ver_str)
+          print(f"Current project version: {current_ver_str}")
+
+          # 2. Query latest release tag from GitHub
+          try:
+              output = subprocess.check_output(
+                  ["gh", "release", "list", "--limit", "1", "--json", "tagName", "--jq", ".[0].tagName"],
+                  text=True
+              ).strip()
+          except Exception as e:
+              output = ""
+
+          latest_tag = output.lstrip("v") if output else ""
+          print(f"Latest GitHub release tag: {output or 'None'}")
+
+          should_release = False
+          if not latest_tag:
+              print("No previous release found. First release triggered.")
+              should_release = True
+          else:
+              latest_ver = version.parse(latest_tag)
+              if current_ver > latest_ver:
+                  print(f"Version bump detected: {latest_ver} -> {current_ver}")
+                  should_release = True
+              else:
+                  print(f"Current version ({current_ver}) is not greater than latest release ({latest_ver}). Skipping release.")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as gh_out:
+              gh_out.write(f"should_release={str(should_release).lower()}\n")
+              gh_out.write(f"version={current_ver_str}\n")
+          EOF
+
+      - name: Build Windows Portable Executable
+        if: steps.version_check.outputs.should_release == 'true'
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name "ChurchPartnerHub" --add-data "src/ui;ui" src/main.py
+
+      - name: Create GitHub Release with Artifact
+        if: steps.version_check.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ver = "${{ steps.version_check.outputs.version }}"
+          gh release create "v$ver" dist/ChurchPartnerHub.exe `
+            --title "church-partner-hub v$ver" `
+            --generate-notes

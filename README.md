@@ -27,29 +27,25 @@
    - **5단계 규모별 세그먼트**: 소형(~100), 중형(100~500), 중대형(500~1,000), 대형(1,000~3,000), 초대형(3,000~)별 교회 수 및 분포도 시각화
    - **인터랙티브 드릴다운**: 특정 지역/교단/규모 클릭 시 해당하는 교회 상세 목록 즉시 조회
 
----
+## 📂 프로젝트 문서 및 지침서 (Documentation)
 
-## 📂 프로젝트 구조 (예정)
-
-```text
-church-partner-hub/
-├── docs/             # 기획, 아키텍처 및 설계 문서
-│   ├── brainstorm/   # 아이디어 브레인스토밍 기록
-│   └── architecture/ # 데이터 흐름 및 모듈 설계
-├── src/              # 소스 코드
-│   ├── core/         # 주소 추정기, 크롤러, 근거 추출 엔진
-│   ├── sync/         # 엑셀 마스터시트 ↔ 옵시디언 동기화 모듈
-│   └── cli/          # 대화형 검증 및 실행 인터페이스
-├── tests/            # 회귀 및 단위 테스트
-└── README.md
-```
+* 🔄 [**작업 및 PR·배포 워크플로우 지침서 (`workflow-guide.md`)**](file:///C:/Users/20260602/Documents/github/church-partner-hub/docs/plans/workflow-guide.md)
+* 📐 [**서비스 상세 기획안 (`product-specification.md`)**](file:///C:/Users/20260602/Documents/github/church-partner-hub/docs/plans/product-specification.md)
+* ⚙️ [**프로그램 기술 설계지침서 (`technical-architecture-guide.md`)**](file:///C:/Users/20260602/Documents/github/church-partner-hub/docs/plans/technical-architecture-guide.md)
+* 📋 [**요구사항 정의 및 개발 계획서 (`implementation-plan.md`)**](file:///C:/Users/20260602/Documents/github/church-partner-hub/docs/plans/implementation-plan.md)
+* 📝 [**기본 설계서 (`design-church-partner-hub.md`)**](file:///C:/Users/20260602/Documents/github/church-partner-hub/docs/plans/designs/design-church-partner-hub.md)
 
 ---
 
-## 📜 기획 진행 상태
+## 📜 기획 및 구현 진행 상태
 
 - [x] 프로젝트명 선정 (`church-partner-hub`)
-- [x] Git 저장소 초기화 및 기본 환경 세팅
-- [ ] 엑셀 ↔ 옵시디언 동기화 아키텍처 설계
-- [ ] 주소 추정 및 Grounding 엔진 설계
-- [ ] 상세 기능 계획 및 구현 마일스톤 확정
+- [x] Git 저장소 초기화 및 GitHub Public 연동
+- [x] 서비스 상세 기획안 및 기술 설계지침서 (SOLID, YAGNI, 2~3회 확장성) 확정
+- [x] 작업 워크플로우 지침서 및 GitHub Actions CI/CD 파이프라인 구성
+- [x] **Phase 1: 기반 구조 및 UI 셸 구축 완료** (`pywebview`, 도메인 모델, IPC 브릿지, 단위 테스트 통과)
+- [ ] **Phase 2: 이원화 엑셀 엔진 & 공문/선물 퀵서처 구현** (작업 예정)
+- [ ] **Phase 3: 2단계 하이브리드 주소·홈페이지 연계 Grounding 엔진 구현**
+- [ ] **Phase 4: 지역별 교세·교단·5단계 규모 분석 대시보드 구현**
+- [ ] **Phase 5: 옵시디언 ↔ 엑셀 스마트 동기화 구현**
+- [ ] **Phase 6: 포터블 윈도우 `.exe` 빌드 및 자동 릴리즈**
