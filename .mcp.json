@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "serena": {
+      "command": "oma",
+      "args": [
+        "bridge",
+        "--context",
+        "oma"
+      ],
+      "env": {
+        "SERENA_LOG_LEVEL": "info"
+      }
+    },
+    "firefox-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mozilla/firefox-devtools-mcp@latest",
+        "--autoProfile"
+      ]
+    }
+  }
+}

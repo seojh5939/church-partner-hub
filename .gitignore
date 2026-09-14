@@ -65,3 +65,13 @@ temp/
 tmp/
 logs/
 *.log
+
+# oh-my-agent runtime (local artifacts — do not commit)
+.agents/oma-config.local.cue
+.agents/oma-config.local.yaml
+.antigravitycli/
+.agents/results/
+.agents/state/
+.agents/backup/
+.migration-backup/
+.qwen/tmp/
