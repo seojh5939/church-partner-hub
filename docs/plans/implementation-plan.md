@@ -63,19 +63,22 @@
   - 선택 교회 일괄 발송용 미니 엑셀 다운로드
 - [x] Phase 2 단위 테스트 및 통합 브릿지 테스트 통과 (`tests/test_excel_engine.py`, `tests/test_dispatch.py`, `tests/test_bridge.py`)
 
-### Phase 3: 2단계 하이브리드 주소·홈페이지 추정기 & 대화형 Grounding 검증 UI
-- [ ] `AddressGrounder` 구현 (`src/core/grounder.py`):
+### Phase 3: 2단계 하이브리드 주소·홈페이지 추정기 & 대화형 Grounding 검증 UI (완료)
+- [x] `AddressGrounder` 구현 (`src/core/grounder.py`):
   - 1차: 무설정 웹 탐색(네이버 플레이스/포털)으로 도로명 주소 및 목회자 일치 스니펫 수집
   - 2차: `.env` 또는 설정에 카카오/네이버 API 등록 시 공식 API 고속 자동 전환
   - 신뢰도(Confidence) 산출: High (90%+), Medium (70~89%), Low (<70%)
-- [ ] `HomepageGrounder` 구현 (`src/core/homepage_grounder.py`):
+- [x] `HomepageGrounder` 구현 (`src/core/homepage_grounder.py`):
   - 포털 웹 검색을 통한 공식 웹사이트 수집 및 '오시는 길'/푸터 주소 파싱
   - **Cascading Uncertainty 알고리즘**: 1차 교회 주소가 불확실(`LOW`/미확정)하거나 사이트 내 주소 불일치 시, 홈페이지 신뢰도를 무조건 `LOW (검증 보류)`로 강제 강등
   - 1차 주소 확정 및 사이트 내 주소 일치 시에만 `HIGH (확정)` 부여
-- [ ] 대화형 Grounding 검증 뷰:
+  - SSRF 방지(사설/루프백 IP 차단) 및 DoS 메모리 스트리밍 상한(1MB) 내장
+- [x] 대화형 Grounding 검증 뷰 & 보안 하드닝:
   - 후보 도로명 주소, 우편번호, 포털 지도 바로가기 버튼 표시
   - 후보 홈페이지 URL, 사이트 미리보기 링크, "주소 불확실에 따른 홈페이지 검증 보류" 상태 배지 표시
   - `[원클릭 승인]`, `[주소/URL 직접 수정]`, `[보류]` 및 주소 수기 수정 시 [홈페이지 즉시 재평가] 연계 처리
+  - XSS 방지(DOM 이스케이프) 및 WCAG 2.2 AA 키보드 접근성 준수
+- [x] Phase 3 단위 테스트 및 브릿지/보안 테스트 37건 100% 통과 (`tests/test_grounder.py`, `tests/test_bridge.py`)
 
 ### Phase 4: 지역별 교세·교단·규모 분석 엔진 & 시각화 (User Requirements)
 - [ ] `AnalyticsEngine` 구현 (`src/core/analytics.py`):
