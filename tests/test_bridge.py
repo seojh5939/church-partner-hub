@@ -1,5 +1,4 @@
-"""Unit tests for ChurchBridge IPC API Gateway."""
-
+from unittest.mock import MagicMock, patch
 import pytest
 from src.bridge import ChurchBridge
 
@@ -44,7 +43,8 @@ def test_search_and_confirm_address(bridge):
     assert confirm_res["data"]["updated_record"]["verification_status"] == "승인완료"
 
 
-def test_cascading_uncertainty_homepage_search(bridge):
+@patch("requests.get")
+def test_cascading_uncertainty_homepage_search(mock_get, bridge):
     # 1. Before address is confirmed (Row 4 하남샘물교회 has missing address)
     hp_res_before = bridge.search_homepage(4, mode="MASTER")
     assert hp_res_before["success"] is True
@@ -57,7 +57,21 @@ def test_cascading_uncertainty_homepage_search(bridge):
     # 2. Confirm address first
     bridge.confirm_address(4, "경기도 하남시 신평로 45", "12998", mode="MASTER")
 
-    # 3. Search homepage again after address is confirmed
+    # 3. Setup mock response for homepage crawl
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.headers = {"Content-Type": "text/html; charset=utf-8"}
+    mock_resp.iter_content = MagicMock(
+        return_value=[
+            b"<html><body><footer><address>\xea\xb2\xbd\xea\xb8\xb0\xeb\x8f\x84 \xed\x95\x98\xeb\x82\xa8\xec\x8b\x9c \xec\x8b\xa0\xed\x8f\x89\xeb\xa1\x9c 45</address></footer></body></html>"
+        ]
+    )
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.text = "<html><body><footer><address>경기도 하남시 신평로 45</address></footer></body></html>"
+    mock_get.return_value = mock_resp
+    mock_get.return_value.__enter__.return_value = mock_resp
+
+    # 4. Search homepage again after address is confirmed
     hp_res_after = bridge.search_homepage(4, mode="MASTER")
     assert hp_res_after["success"] is True
     candidate_after = hp_res_after["data"]["candidate"]

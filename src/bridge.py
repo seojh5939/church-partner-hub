@@ -9,6 +9,8 @@ import os
 
 from src.core.dispatch import DispatchManager
 from src.core.excel_engine import ExcelEngine, ExcelFileLockedError
+from src.core.grounder import AddressGrounder
+from src.core.homepage_grounder import HomepageGrounder
 from src.core.models import (
     AddressCandidate,
     ChurchRecord,
@@ -32,6 +34,8 @@ class ChurchBridge:
         self.simple_records: List[SimpleAddressRecord] = []
         self.excel_engine = ExcelEngine()
         self.dispatch_manager = DispatchManager()
+        self.address_grounder = AddressGrounder()
+        self.homepage_grounder = HomepageGrounder()
         self.loaded_file_path: Optional[str] = None
         self._load_default_demo_data()
 
@@ -328,60 +332,12 @@ class ChurchBridge:
         pastor = getattr(record, "pastor", "")
         region = getattr(record, "region", "")
 
-        # 데모 탐색 후보 생성
-        if "동성교회" in church_name:
-            candidates = [
-                AddressCandidate(
-                    road_address="광주광역시 동구 필문대로 205",
-                    jibun_address="광주 동구 계림동 301",
-                    zip_code="61448",
-                    confidence=94,
-                    confidence_level="HIGH",
-                    match_evidence=f"네이버 지도 대표자 '{pastor}' 목사 확인됨",
-                    map_url=f"https://map.naver.com/p/search/{region}%20{church_name}",
-                    place_name=church_name,
-                    phone="062-225-0191",
-                ),
-                AddressCandidate(
-                    road_address="광주광역시 북구 설죽로 315",
-                    jibun_address="광주 북구 일곡동 840",
-                    zip_code="61040",
-                    confidence=68,
-                    confidence_level="LOW",
-                    match_evidence="동명 교회 (북구 소재 / 대표자 상이)",
-                    map_url=f"https://map.naver.com/p/search/{region}%20{church_name}",
-                    place_name="북부동성교회",
-                    phone="062-571-0691",
-                ),
-            ]
-        elif "샘물교회" in church_name:
-            candidates = [
-                AddressCandidate(
-                    road_address="경기도 하남시 신평로 45",
-                    jibun_address="경기 하남시 신장동 430",
-                    zip_code="12998",
-                    confidence=72,
-                    confidence_level="MEDIUM",
-                    match_evidence="교회명 및 하남시 일치 (목회자명 웹 미확인)",
-                    map_url=f"https://map.naver.com/p/search/{region}%20{church_name}",
-                    place_name=church_name,
-                    phone="031-791-0191",
-                )
-            ]
-        else:
-            candidates = [
-                AddressCandidate(
-                    road_address=getattr(record, "address", "") or f"{region} 중앙로 100",
-                    jibun_address=f"{region} 중앙동 1",
-                    zip_code=getattr(record, "zip_code", "") or "12345",
-                    confidence=95,
-                    confidence_level="HIGH",
-                    match_evidence=f"대표자 '{pastor}' 일치 확인",
-                    map_url=f"https://map.naver.com/p/search/{region}%20{church_name}",
-                    place_name=church_name,
-                    phone="02-1234-5678",
-                )
-            ]
+        try:
+            candidates = self.address_grounder.search(
+                church_name=church_name, pastor=pastor, region=region
+            )
+        except Exception:
+            candidates = self.address_grounder.fallback_candidates(church_name, pastor, region)
 
         return {"success": True, "data": {"candidates": [c.to_dict() for c in candidates]}, "error": None}
 
@@ -414,54 +370,40 @@ class ChurchBridge:
         if not record:
             return {"success": False, "data": None, "error": "해당 행을 찾을 수 없습니다."}
 
-        church_name = getattr(record, "church_name", "")
-        addr = getattr(record, "address", "") if target_mode == "MASTER" else getattr(record, "road_address", "")
-        addr_status = (
-            getattr(record, "verification_status", "")
-            if target_mode == "MASTER"
-            else getattr(record, "address_status", "")
-        )
-
-        is_address_confirmed = addr_status in ["승인완료", "수기입력", "확인완료"] and bool(addr)
-
-        # Cascading Uncertainty 적용: 주소가 미확정이거나 불확실하면 홈페이지도 필연적으로 불확실 강등
-        if not is_address_confirmed:
-            candidate = HomepageCandidate(
-                url=f"http://www.{church_name.lower()}.org" if "동성" not in church_name else "http://www.dongsung.org",
-                title=f"{church_name} 공식 홈페이지 (추정)",
-                matched_address="",
-                is_address_matched=False,
-                confidence_level="LOW",
-                evidence="⚠️ 1차 교회 주소 불확실에 따른 홈페이지 검증 보류 (Cascading Uncertainty)",
-                is_dependent_uncertain=True,
-            )
-        else:
-            # 주소가 확정된 경우: 웹사이트 내 주소 일치 교차 검증 수행
-            candidate = HomepageCandidate(
-                url=f"http://www.{church_name.lower()}.org" if "동성" not in church_name else "http://www.gjdongsung.or.kr",
-                title=f"{church_name} - 오시는 길 및 안내",
-                matched_address=addr,
-                is_address_matched=True,
-                confidence_level="HIGH",
-                evidence=f"웹사이트 푸터 주소 '{addr}' 100% 일치 확인",
-                is_dependent_uncertain=False,
-            )
+        try:
+            candidate = self.homepage_grounder.search_and_evaluate(record, mode=target_mode)
+        except Exception:
+            candidate = self.homepage_grounder.fallback_candidate(record, mode=target_mode)
 
         return {"success": True, "data": {"candidate": candidate.to_dict()}, "error": None}
 
     def confirm_homepage(self, row_id: int, url: str, mode: Optional[str] = None) -> Dict[str, Any]:
-        """홈페이지 URL 확정 반영."""
+        """홈페이지 URL 확정 반영 (Cascading Uncertainty 정책 준수)."""
         target_mode = mode or self.current_mode
         record = self._find_record(row_id, target_mode)
         if not record:
             return {"success": False, "data": None, "error": "해당 행을 찾을 수 없습니다."}
 
-        record.homepage = url
-        if target_mode == "MASTER":
-            record.homepage_status = "확인완료"
-        else:
-            record.homepage_status = "확인완료"
+        # Cascading Uncertainty 불변식 검증: 1차 주소가 미확정된 상태에서는 홈페이지 확정 불가
+        addr_status = getattr(
+            record,
+            "verification_status" if target_mode == "MASTER" else "address_status",
+            "",
+        )
+        addr = getattr(
+            record, "address" if target_mode == "MASTER" else "road_address", ""
+        )
+        if addr_status not in ["승인완료", "수기입력", "확인완료"] or not (
+            addr and addr.strip()
+        ):
+            return {
+                "success": False,
+                "data": None,
+                "error": "1차 도로명 주소가 미확정된 상태에서는 홈페이지를 확정할 수 없습니다 (Cascading Uncertainty 정책).",
+            }
 
+        record.homepage = url
+        record.homepage_status = "확인완료"
         return {"success": True, "data": {"updated_record": record.to_dict()}, "error": None}
 
     # --- Quick Dispatch ---

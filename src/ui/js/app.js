@@ -42,6 +42,27 @@ function updateConnectionBadge(connected) {
   }
 }
 
+// --- Security Helpers (XSS & URL sanitization) ---
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function sanitizeUrl(url) {
+  if (!url) return "";
+  const clean = String(url).trim();
+  if (/^https?:\/\//i.test(clean)) {
+    return clean;
+  }
+  return "#";
+}
+
 // --- IPC Communication Helpers ---
 
 async function callApi(method, ...args) {
@@ -287,20 +308,20 @@ function renderDashboard() {
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${r.row_id}</td>
-        <td><strong>${r.region}</strong></td>
-        <td>${r.classification || "-"}</td>
-        <td><strong>${r.church_name}</strong></td>
-        <td>${r.pastor}</td>
-        <td>${r.denomination || "-"}</td>
+        <td><strong>${escapeHtml(r.region)}</strong></td>
+        <td>${escapeHtml(r.classification) || "-"}</td>
+        <td><strong>${escapeHtml(r.church_name)}</strong></td>
+        <td>${escapeHtml(r.pastor)}</td>
+        <td>${escapeHtml(r.denomination) || "-"}</td>
         <td>${r.congregation_size ? r.congregation_size.toLocaleString() : "-"}</td>
-        <td><span class="badge badge-primary">${r.scale_tier || "-"}</span></td>
-        <td>${r.address || '<span style="color:#94a3b8">(주소 누락)</span>'}</td>
-        <td>${r.zip_code || "-"}</td>
-        <td>${r.homepage ? `<a href="${r.homepage}" target="_blank" style="color:var(--primary)">${r.homepage}</a>` : "-"}</td>
+        <td><span class="badge badge-primary">${escapeHtml(r.scale_tier) || "-"}</span></td>
+        <td>${r.address ? escapeHtml(r.address) : '<span style="color:#94a3b8">(주소 누락)</span>'}</td>
+        <td>${escapeHtml(r.zip_code) || "-"}</td>
+        <td>${r.homepage ? `<a href="${sanitizeUrl(r.homepage)}" target="_blank" style="color:var(--primary)">${escapeHtml(r.homepage)}</a>` : "-"}</td>
         <td>${renderStatusBadge(r.verification_status)}</td>
         <td>${renderStatusBadge(r.homepage_status)}</td>
-        <td>${r.primary_campaign || "-"}</td>
-        <td>${r.next_action || "-"}</td>
+        <td>${escapeHtml(r.primary_campaign) || "-"}</td>
+        <td>${escapeHtml(r.next_action) || "-"}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -321,12 +342,12 @@ function renderDashboard() {
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${r.row_id}</td>
-        <td><strong>${r.church_name}</strong></td>
-        <td>${r.pastor}</td>
-        <td>${r.region}</td>
-        <td>${r.road_address || '<span style="color:#94a3b8">(주소 미검증)</span>'}</td>
-        <td>${r.zip_code || "-"}</td>
-        <td>${r.homepage ? `<a href="${r.homepage}" target="_blank" style="color:var(--primary)">${r.homepage}</a>` : "-"}</td>
+        <td><strong>${escapeHtml(r.church_name)}</strong></td>
+        <td>${escapeHtml(r.pastor)}</td>
+        <td>${escapeHtml(r.region)}</td>
+        <td>${r.road_address ? escapeHtml(r.road_address) : '<span style="color:#94a3b8">(주소 미검증)</span>'}</td>
+        <td>${escapeHtml(r.zip_code) || "-"}</td>
+        <td>${r.homepage ? `<a href="${sanitizeUrl(r.homepage)}" target="_blank" style="color:var(--primary)">${escapeHtml(r.homepage)}</a>` : "-"}</td>
         <td>${renderStatusBadge(r.address_status)}</td>
       `;
       tbody.appendChild(tr);
@@ -367,10 +388,15 @@ function renderGroundingList() {
     item.style.display = "flex";
     item.style.justifyContent = "space-between";
     item.style.alignItems = "center";
+    item.setAttribute("role", "button");
+    item.setAttribute("tabindex", "0");
+    item.setAttribute("aria-label", `${r.church_name} ${r.pastor} 목사 주소 검증 선택`);
+
+    const churchAddr = r.address || r.road_address || "누락";
     item.innerHTML = `
       <div>
-        <div style="font-weight:600">${r.church_name} (${r.pastor})</div>
-        <div style="font-size:12px;color:var(--text-muted)">${r.region} | 주소: ${r.address || r.road_address || "누락"}</div>
+        <div style="font-weight:600">${escapeHtml(r.church_name)} (${escapeHtml(r.pastor)})</div>
+        <div style="font-size:12px;color:var(--text-muted)">${escapeHtml(r.region)} | 주소: ${escapeHtml(churchAddr)}</div>
       </div>
       <div>
         ${isUnverified ? '<span class="badge badge-warning">검증 필요</span>' : '<span class="badge badge-success">완료</span>'}
@@ -378,6 +404,12 @@ function renderGroundingList() {
     `;
 
     item.addEventListener("click", () => loadGroundingDetail(r));
+    item.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        loadGroundingDetail(r);
+      }
+    });
     listContainer.appendChild(item);
   });
 
@@ -391,7 +423,7 @@ async function loadGroundingDetail(record) {
   const detailContainer = document.getElementById("grounding-card-detail");
   detailContainer.innerHTML = `
     <div style="font-size:15px;margin-bottom:12px">
-      <strong>${record.church_name}</strong> (${record.pastor} 목사 / ${record.region})
+      <strong>${escapeHtml(record.church_name)}</strong> (${escapeHtml(record.pastor)} 목사 / ${escapeHtml(record.region)})
     </div>
     <div style="color:var(--text-muted);font-size:13px;margin-bottom:16px">
       포털 지도 및 웹 검색을 통해 도로명 주소와 공식 홈페이지를 2단계로 연계 추정합니다.
@@ -447,7 +479,7 @@ function renderGroundingDetailCard(record, addrCandidates, hpCandidate) {
 
   detailContainer.innerHTML = `
     <div style="font-size:16px;font-weight:700;margin-bottom:6px">
-      ${record.church_name} <span style="font-size:13px;font-weight:400;color:var(--text-muted)">(${record.pastor} 목사 / ${record.region})</span>
+      ${escapeHtml(record.church_name)} <span style="font-size:13px;font-weight:400;color:var(--text-muted)">(${escapeHtml(record.pastor)} 목사 / ${escapeHtml(record.region)})</span>
     </div>
     
     <div class="grounding-grid" style="margin-top:16px">
@@ -456,12 +488,12 @@ function renderGroundingDetailCard(record, addrCandidates, hpCandidate) {
         <div class="box-title">
           <span>📍 1단계: 도로명 주소 추정</span>
           <span class="badge ${bestAddr.confidence_level === 'HIGH' ? 'badge-success' : 'badge-warning'}">
-            신뢰도 ${bestAddr.confidence}% (${bestAddr.confidence_level})
+            신뢰도 ${bestAddr.confidence}% (${escapeHtml(bestAddr.confidence_level)})
           </span>
         </div>
-        <div style="font-size:14px;font-weight:600;margin-bottom:4px">${bestAddr.road_address}</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">우편번호: ${bestAddr.zip_code || "자동부여"} | 근거: ${bestAddr.match_evidence}</div>
-        ${bestAddr.map_url ? `<a href="${bestAddr.map_url}" target="_blank" class="btn btn-secondary btn-sm" style="margin-bottom:12px">🗺️ 포털 지도 확인</a>` : ''}
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px">${escapeHtml(bestAddr.road_address)}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">우편번호: ${escapeHtml(bestAddr.zip_code) || "자동부여"} | 근거: ${escapeHtml(bestAddr.match_evidence)}</div>
+        ${bestAddr.map_url ? `<a href="${sanitizeUrl(bestAddr.map_url)}" target="_blank" class="btn btn-secondary btn-sm" style="margin-bottom:12px">🗺️ 포털 지도 확인</a>` : ''}
         
         <div>
           <button class="btn btn-primary btn-sm" id="btn-approve-address">주소 원클릭 확정</button>
@@ -474,15 +506,15 @@ function renderGroundingDetailCard(record, addrCandidates, hpCandidate) {
         <div class="box-title">
           <span>🌐 2단계: 공식 홈페이지 대조</span>
           <span class="badge ${hpCandidate && hpCandidate.confidence_level === 'HIGH' ? 'badge-success' : 'badge-danger'}">
-            ${hpCandidate ? hpCandidate.confidence_level : 'LOW'}
+            ${hpCandidate ? escapeHtml(hpCandidate.confidence_level) : 'LOW'}
           </span>
         </div>
         <div style="font-size:14px;font-weight:600;margin-bottom:4px;word-break:break-all">
-          ${hpCandidate ? hpCandidate.url : '검색된 URL 없음'}
+          ${hpCandidate && hpCandidate.url ? `<a href="${sanitizeUrl(hpCandidate.url)}" target="_blank" style="color:var(--primary)">${escapeHtml(hpCandidate.url)}</a>` : '검색된 URL 없음'}
         </div>
         
         <div style="font-size:12px;color:${hpCandidate && hpCandidate.is_dependent_uncertain ? 'var(--danger)' : 'var(--text-muted)'};margin-bottom:12px;line-height:1.4">
-          ${hpCandidate ? hpCandidate.evidence : '주소 검증 후 확인 가능'}
+          ${hpCandidate ? escapeHtml(hpCandidate.evidence) : '주소 검증 후 확인 가능'}
         </div>
 
         <div>
@@ -573,15 +605,16 @@ function renderQuickSearchResults(results) {
     const card = document.createElement("div");
     card.className = "card";
     card.style.marginBottom = "14px";
+    const churchAddr = r.address || r.road_address || '<span style="color:#ef4444">주소 누락</span>';
     card.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
-          <div style="font-size:16px;font-weight:700">${r.church_name}</div>
+          <div style="font-size:16px;font-weight:700">${escapeHtml(r.church_name)}</div>
           <div style="font-size:13px;color:var(--text-muted);margin-top:2px">
-            담임목사: <strong>${r.pastor}</strong> | 지역: ${r.region} | 우편번호: ${r.zip_code || "-"}
+            담임목사: <strong>${escapeHtml(r.pastor)}</strong> | 지역: ${escapeHtml(r.region)} | 우편번호: ${escapeHtml(r.zip_code) || "-"}
           </div>
-          <div style="font-size:13px;margin-top:6px">주소: ${r.address || r.road_address || '<span style="color:#ef4444">주소 누락</span>'}</div>
-          ${r.homepage ? `<div style="font-size:12px;color:var(--primary);margin-top:4px">홈페이지: ${r.homepage}</div>` : ''}
+          <div style="font-size:13px;margin-top:6px">주소: ${r.address || r.road_address ? escapeHtml(r.address || r.road_address) : '<span style="color:#ef4444">주소 누락</span>'}</div>
+          ${r.homepage ? `<div style="font-size:12px;color:var(--primary);margin-top:4px">홈페이지: <a href="${sanitizeUrl(r.homepage)}" target="_blank">${escapeHtml(r.homepage)}</a></div>` : ''}
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-primary btn-sm" onclick="copyDispatchText('OFFICIAL', ${r.row_id})">📄 공문용 복사</button>

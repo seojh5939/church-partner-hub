@@ -2,6 +2,8 @@
 
 from src.core.dispatch import DispatchManager, extract_chosung, is_chosung_only
 from src.core.excel_engine import ExcelEngine, ExcelFileLockedError
+from src.core.grounder import AddressGrounder
+from src.core.homepage_grounder import HomepageGrounder
 from src.core.models import (
     AddressCandidate,
     ChurchRecord,
@@ -21,4 +23,6 @@ __all__ = [
     "DispatchManager",
     "extract_chosung",
     "is_chosung_only",
+    "AddressGrounder",
+    "HomepageGrounder",
 ]

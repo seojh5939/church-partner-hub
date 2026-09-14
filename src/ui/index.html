@@ -125,7 +125,7 @@
           </div>
           <button class="btn btn-secondary btn-sm" id="btn-export-dispatch">📥 발송 명단 엑셀 다운로드</button>
         </div>
-        <input type="text" id="quick-search-input" class="search-input" placeholder="교회명 초성(ㄱㅈㅅ) 또는 목회자명 검색...">
+        <input type="text" id="quick-search-input" class="search-input" placeholder="교회명 초성(ㄱㅈㅅ) 또는 목회자명 검색..." aria-label="교회명 및 목회자명 퀵 검색">
       </div>
 
       <div id="quick-search-results"></div>
@@ -136,7 +136,7 @@
       <div class="card">
         <div class="card-header">
           <div class="card-title">지역별 교단 및 5단계 규모(성도 수) 분포 분석</div>
-          <select id="analytics-region-select" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px">
+          <select id="analytics-region-select" aria-label="지역별 필터 선택" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px">
             <option value="전체">전체 지역</option>
             <option value="광주">광주</option>
             <option value="서울">서울</option>
@@ -163,12 +163,12 @@
         <div class="card-title" style="margin-bottom:16px">시스템 환경 설정</div>
         <div style="display:flex;flex-direction:column;gap:16px;max-width:540px">
           <div>
-            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">옵시디언 볼트 경로</label>
-            <input type="text" value="C:\Users\20260602\Documents\github\Obsidian" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px">
+            <label for="settings-obsidian-path" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">옵시디언 볼트 경로</label>
+            <input id="settings-obsidian-path" type="text" value="C:\Users\20260602\Documents\github\Obsidian" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px">
           </div>
           <div>
-            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">지도 API 키 (선택 사항 - 미등록 시 포털 웹 탐색)</label>
-            <input type="password" placeholder="Kakao / Naver Cloud API Key" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px">
+            <label for="settings-map-api-key" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">지도 API 키 (선택 사항 - 미등록 시 포털 웹 탐색)</label>
+            <input id="settings-map-api-key" type="password" placeholder="Kakao / Naver Cloud API Key" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px">
           </div>
           <div>
             <button class="btn btn-primary" onclick="showToast('설정이 저장되었습니다.')">설정 저장</button>
@@ -180,7 +180,7 @@
   </main>
 
   <!-- Toast Notification -->
-  <div id="toast">알림 메시지</div>
+  <div id="toast" role="status" aria-live="polite">알림 메시지</div>
 
   <script src="js/app.js"></script>
 </body>

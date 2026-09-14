@@ -55,7 +55,18 @@ def main() -> None:
         c_name = search_res["data"]["results"][0]["church_name"]
         print(f"[Smoke-Test] DispatchManager Chosung Search verified: found '{c_name}'.")
 
-        print("[Smoke-Test] All Phase 1 & 2 components operational.")
+        # Phase 3 component smoke test (Grounding & Cascading Uncertainty)
+        addr_res = bridge.search_address(2, mode="MASTER")
+        assert addr_res["success"] is True and len(addr_res["data"]["candidates"]) > 0
+        print(f"[Smoke-Test] AddressGrounder verified: {len(addr_res['data']['candidates'])} candidates found.")
+
+        hp_res = bridge.search_homepage(2, mode="MASTER")
+        assert hp_res["success"] is True
+        cand = hp_res["data"]["candidate"]
+        assert cand["is_dependent_uncertain"] is True and cand["confidence_level"] == "LOW"
+        print("[Smoke-Test] HomepageGrounder & Cascading Uncertainty policy verified.")
+
+        print("[Smoke-Test] All Phase 1, 2 & 3 components operational.")
         return
 
     import webview  # type: ignore
