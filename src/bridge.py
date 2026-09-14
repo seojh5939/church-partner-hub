@@ -4,9 +4,11 @@ Follows SOLID and YAGNI principles. All methods return a standard dict:
 {"success": bool, "data": Any, "error": Optional[str]}.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import os
 
+from src.core.dispatch import DispatchManager
+from src.core.excel_engine import ExcelEngine, ExcelFileLockedError
 from src.core.models import (
     AddressCandidate,
     ChurchRecord,
@@ -14,6 +16,11 @@ from src.core.models import (
     SimpleAddressRecord,
     classify_church_scale,
 )
+
+try:
+    import webview
+except ImportError:
+    webview = None
 
 
 class ChurchBridge:
@@ -23,6 +30,9 @@ class ChurchBridge:
         self.current_mode: str = "MASTER"  # "MASTER" | "SIMPLE"
         self.master_records: List[ChurchRecord] = []
         self.simple_records: List[SimpleAddressRecord] = []
+        self.excel_engine = ExcelEngine()
+        self.dispatch_manager = DispatchManager()
+        self.loaded_file_path: Optional[str] = None
         self._load_default_demo_data()
 
     def _load_default_demo_data(self) -> None:
@@ -194,7 +204,116 @@ class ChurchBridge:
             "verified_address_count": verified_addr,
             "missing_address_count": missing_addr,
             "verified_homepage_count": verified_hp,
+            "loaded_file_path": self.loaded_file_path,
         }
+
+    # --- Excel & File I/O ---
+
+    def select_file_dialog(self, dialog_type: str = "open") -> Dict[str, Any]:
+        """데스크톱 파일 선택 다이얼로그를 표시합니다."""
+        if not webview or not webview.windows:
+            return {"success": False, "data": None, "error": "파일 대화상자를 열 수 있는 윈도우 환경이 아닙니다."}
+
+        try:
+            window = webview.windows[0]
+            if dialog_type == "open":
+                file_types = ("Excel / CSV Files (*.xlsx;*.csv)", "All files (*.*)")
+                result = window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=file_types)
+                if result and len(result) > 0:
+                    return {"success": True, "data": {"file_path": result[0]}, "error": None}
+            elif dialog_type == "save":
+                file_types = ("Excel Workbook (*.xlsx)", "CSV UTF-8 (*.csv)", "All files (*.*)")
+                result = window.create_file_dialog(webview.SAVE_DIALOG, save_filename="church_partners.xlsx", file_types=file_types)
+                if result:
+                    path = result if isinstance(result, str) else result[0]
+                    return {"success": True, "data": {"file_path": path}, "error": None}
+            return {"success": False, "data": None, "error": "파일이 선택되지 않았습니다."}
+        except Exception as e:
+            return {"success": False, "data": None, "error": f"파일 대화상자 오류: {e}"}
+
+    def load_excel(self, file_path: Optional[str] = None) -> Dict[str, Any]:
+        """엑셀 또는 CSV 파일을 열어 스키마 모드를 자동 감지하고 데이터를 로드합니다."""
+        target_path = file_path
+        if not target_path:
+            dialog_res = self.select_file_dialog("open")
+            if not dialog_res["success"] or not dialog_res["data"]:
+                return {"success": False, "data": None, "error": dialog_res.get("error") or "파일이 선택되지 않았습니다."}
+            target_path = dialog_res["data"]["file_path"]
+
+        try:
+            detected_mode = self.excel_engine.detect_mode(target_path)
+            self.current_mode = detected_mode
+            self.loaded_file_path = target_path
+
+            if detected_mode == "MASTER":
+                records = self.excel_engine.load_master_records(target_path)
+                self.master_records = records
+            else:
+                records = self.excel_engine.load_simple_records(target_path)
+                self.simple_records = records
+
+            return {
+                "success": True,
+                "data": {
+                    "mode": self.current_mode,
+                    "file_path": target_path,
+                    "records": [r.to_dict() for r in records],
+                    "master_records": [r.to_dict() for r in self.master_records],
+                    "simple_records": [r.to_dict() for r in self.simple_records],
+                    "stats": self._calculate_stats(),
+                },
+                "error": None,
+            }
+        except ExcelFileLockedError as e:
+            return {"success": False, "data": None, "error": str(e)}
+        except Exception as e:
+            return {"success": False, "data": None, "error": f"파일 로드 실패: {e}"}
+
+    def save_excel(self, output_path: Optional[str] = None) -> Dict[str, Any]:
+        """현재 모드의 데이터를 엑셀로 저장합니다."""
+        target_path = output_path or self.loaded_file_path
+        if not target_path:
+            dialog_res = self.select_file_dialog("save")
+            if not dialog_res["success"] or not dialog_res["data"]:
+                return {"success": False, "data": None, "error": "저장할 파일 경로가 지정되지 않았습니다."}
+            target_path = dialog_res["data"]["file_path"]
+
+        try:
+            if self.current_mode == "MASTER":
+                saved_path = self.excel_engine.save_master_records(self.master_records, target_path)
+            else:
+                saved_path = self.excel_engine.export_simple_address_book(self.simple_records, target_path)
+            self.loaded_file_path = saved_path
+            return {
+                "success": True,
+                "data": {"file_path": saved_path, "mode": self.current_mode},
+                "error": None,
+            }
+        except ExcelFileLockedError as e:
+            return {"success": False, "data": None, "error": str(e)}
+        except Exception as e:
+            return {"success": False, "data": None, "error": f"파일 저장 실패: {e}"}
+
+    def export_simple_address_book(
+        self, output_path: Optional[str] = None, format: str = "xlsx"
+    ) -> Dict[str, Any]:
+        """간편 주소록 모드 전용 7개 정제 컬럼 내보내기."""
+        target_path = output_path
+        if not target_path:
+            dialog_res = self.select_file_dialog("save")
+            if not dialog_res["success"] or not dialog_res["data"]:
+                return {"success": False, "data": None, "error": "저장할 경로를 지정해주세요."}
+            target_path = dialog_res["data"]["file_path"]
+
+        try:
+            saved_path = self.excel_engine.export_simple_address_book(
+                self.simple_records, target_path, file_format=format
+            )
+            return {"success": True, "data": {"file_path": saved_path, "count": len(self.simple_records)}, "error": None}
+        except ExcelFileLockedError as e:
+            return {"success": False, "data": None, "error": str(e)}
+        except Exception as e:
+            return {"success": False, "data": None, "error": f"간편 주소록 내보내기 실패: {e}"}
 
     # --- Grounding: Address Search & Confirmation ---
 
@@ -349,21 +468,58 @@ class ChurchBridge:
 
     def quick_search(self, keyword: str) -> Dict[str, Any]:
         """교회명/담임목사 초성 및 키워드 검색."""
-        kw = keyword.strip().lower()
-        if not kw:
-            records = self.master_records if self.current_mode == "MASTER" else self.simple_records
-            return {"success": True, "data": {"results": [r.to_dict() for r in records]}, "error": None}
-
-        results = []
         source = self.master_records if self.current_mode == "MASTER" else self.simple_records
-        for r in source:
-            c_name = getattr(r, "church_name", "").lower()
-            p_name = getattr(r, "pastor", "").lower()
-            reg = getattr(r, "region", "").lower()
-            if kw in c_name or kw in p_name or kw in reg:
-                results.append(r.to_dict())
+        matched = self.dispatch_manager.search(source, keyword)
+        return {"success": True, "data": {"results": [r.to_dict() for r in matched]}, "error": None}
 
-        return {"success": True, "data": {"results": results}, "error": None}
+    def copy_dispatch_text(
+        self, row_id: int, format_type: str = "official", mode: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """공문용, 택배용, TSV 규격 텍스트를 생성하여 반환합니다."""
+        target_mode = mode or self.current_mode
+        record = self._find_record(row_id, target_mode)
+        if not record:
+            return {"success": False, "data": None, "error": "해당 행을 찾을 수 없습니다."}
+
+        fmt = format_type.lower()
+        if fmt == "official":
+            text = self.dispatch_manager.format_official(record)
+        elif fmt == "parcel":
+            text = self.dispatch_manager.format_parcel(record)
+        elif fmt == "tsv":
+            text = self.dispatch_manager.format_tsv(record)
+        else:
+            return {"success": False, "data": None, "error": f"지원하지 않는 포맷입니다: {format_type}"}
+
+        return {"success": True, "data": {"text": text, "format": fmt}, "error": None}
+
+    def export_dispatch_list(
+        self,
+        output_path: Optional[str] = None,
+        row_ids: Optional[List[int]] = None,
+        mode: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """선택된 교회(또는 전체) 목록을 발송용 엑셀로 내보냅니다."""
+        target_mode = mode or self.current_mode
+        source = self.master_records if target_mode == "MASTER" else self.simple_records
+
+        if row_ids:
+            target_records = [r for r in source if getattr(r, "row_id", 0) in row_ids]
+        else:
+            target_records = source
+
+        target_path = output_path
+        if not target_path:
+            dialog_res = self.select_file_dialog("save")
+            if not dialog_res["success"] or not dialog_res["data"]:
+                return {"success": False, "data": None, "error": "저장할 경로를 지정해주세요."}
+            target_path = dialog_res["data"]["file_path"]
+
+        try:
+            saved_path = self.dispatch_manager.export_dispatch_list(target_records, target_path)
+            return {"success": True, "data": {"file_path": saved_path, "count": len(target_records)}, "error": None}
+        except Exception as e:
+            return {"success": False, "data": None, "error": f"발송 명단 내보내기 실패: {e}"}
 
     # --- Analytics (Master Mode) ---
 

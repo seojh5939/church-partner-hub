@@ -65,11 +65,59 @@ def test_cascading_uncertainty_homepage_search(bridge):
     assert candidate_after["is_dependent_uncertain"] is False
 
 
-def test_quick_search(bridge):
-    res = bridge.quick_search("겨자씨")
+def test_quick_search_chosung(bridge):
+    # 초성 검색 테스트: 'ㄱㅈㅅ' -> 광주겨자씨교회
+    res = bridge.quick_search("ㄱㅈㅅ")
     assert res["success"] is True
     assert len(res["data"]["results"]) == 1
     assert res["data"]["results"][0]["church_name"] == "광주겨자씨교회"
+
+    # 일반 키워드 검색
+    res_kw = bridge.quick_search("겨자씨")
+    assert res_kw["success"] is True
+    assert len(res_kw["data"]["results"]) == 1
+
+
+def test_copy_dispatch_text(bridge):
+    # Row 1 (광주겨자씨교회)
+    res_off = bridge.copy_dispatch_text(1, format_type="official")
+    assert res_off["success"] is True
+    assert "수신: 광주겨자씨교회" in res_off["data"]["text"]
+
+    res_par = bridge.copy_dispatch_text(1, format_type="parcel")
+    assert res_par["success"] is True
+    assert "받는분: 나학수 목사" in res_par["data"]["text"]
+
+    res_tsv = bridge.copy_dispatch_text(1, format_type="tsv")
+    assert res_tsv["success"] is True
+    assert "광주겨자씨교회\t나학수\t광주" in res_tsv["data"]["text"]
+
+
+def test_export_dispatch_list_via_bridge(bridge, tmp_path):
+    out_file = str(tmp_path / "dispatch_bridge.xlsx")
+    res = bridge.export_dispatch_list(output_path=out_file, row_ids=[1])
+    assert res["success"] is True
+    assert res["data"]["count"] == 1
+
+
+def test_excel_load_and_save_via_bridge(bridge, tmp_path):
+    # 1. 마스터 모드 저장
+    save_path = str(tmp_path / "bridge_master.xlsx")
+    save_res = bridge.save_excel(output_path=save_path)
+    assert save_res["success"] is True
+
+    # 2. 저장된 마스터 파일 다시 로드
+    load_res = bridge.load_excel(file_path=save_path)
+    assert load_res["success"] is True
+    assert load_res["data"]["mode"] == "MASTER"
+    assert len(load_res["data"]["master_records"]) >= 4
+
+    # 3. 간편 모드 전환 후 내보내기
+    bridge.switch_mode("SIMPLE")
+    simple_out = str(tmp_path / "bridge_simple.xlsx")
+    exp_res = bridge.export_simple_address_book(output_path=simple_out)
+    assert exp_res["success"] is True
+    assert exp_res["data"]["count"] >= 2
 
 
 def test_analytics(bridge):

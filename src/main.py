@@ -4,6 +4,16 @@ import os
 import sys
 from pathlib import Path
 
+# Windows 콘솔 및 CI 환경 UTF-8 인코딩 보장
+if sys.platform == "win32":
+    try:
+        if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # Add project root to sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -31,13 +41,21 @@ def main() -> None:
     """데스크톱 앱 실행."""
     # Smoke-test CLI 모드 지원 (CI 또는 테스트 환경용)
     if "--smoke-test" in sys.argv:
-        print("[Smoke-Test] Initializing ChurchBridge...")
+        print("[Smoke-Test] Initializing ChurchBridge and Core Engines...")
         bridge = ChurchBridge()
         state = bridge.get_initial_state()
         assert state["success"] is True
         print(f"[Smoke-Test] Successfully loaded {len(state['data']['master_records'])} master records.")
         print(f"[Smoke-Test] UI Entrypoint verified at: {get_ui_path()}")
-        print("[Smoke-Test] All Phase 1 components operational.")
+
+        # Phase 2 component smoke test
+        search_res = bridge.quick_search("ㄱㅈㅅ")
+        assert search_res["success"] is True
+        assert len(search_res["data"]["results"]) == 1
+        c_name = search_res["data"]["results"][0]["church_name"]
+        print(f"[Smoke-Test] DispatchManager Chosung Search verified: found '{c_name}'.")
+
+        print("[Smoke-Test] All Phase 1 & 2 components operational.")
         return
 
     import webview  # type: ignore

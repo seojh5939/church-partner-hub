@@ -21,6 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupTabs();
   setupModeSwitch();
   setupQuickSearch();
+  setupFileOperations();
 
   // If pywebview is not loaded within 500ms, use mock data
   setTimeout(() => {
@@ -593,27 +594,127 @@ function renderQuickSearchResults(results) {
   });
 }
 
-window.copyDispatchText = function (type, rowId) {
-  const records = currentMode === "MASTER" ? masterRecords : simpleRecords;
-  const r = records.find((item) => item.row_id === rowId);
-  if (!r) return;
-
-  const addr = r.address || r.road_address || "";
-  const zip = r.zip_code || "";
-
+window.copyDispatchText = async function (type, rowId) {
   let text = "";
-  if (type === "OFFICIAL") {
-    text = `수신: ${r.church_name} (${r.pastor} 목사 귀하)\n주소: (${zip}) ${addr}`;
-  } else if (type === "PACKAGE") {
-    text = `${r.church_name} / ${r.pastor} / ${addr} / ${zip}`;
-  } else {
-    text = `${r.church_name}\t${r.pastor}\t${r.region}\t${addr}\t${zip}\t${r.homepage || ""}`;
+  const fmtKey = type === "OFFICIAL" ? "official" : type === "PACKAGE" ? "parcel" : "tsv";
+
+  if (window.pywebview) {
+    const res = await callApi("copy_dispatch_text", rowId, fmtKey, currentMode);
+    if (res && res.text) {
+      text = res.text;
+    }
+  }
+
+  // Fallback if IPC didn't return text
+  if (!text) {
+    const records = currentMode === "MASTER" ? masterRecords : simpleRecords;
+    const r = records.find((item) => item.row_id === rowId);
+    if (!r) return;
+
+    const addr = r.address || r.road_address || "";
+    const zip = r.zip_code || "";
+    if (type === "OFFICIAL") {
+      text = `[공문 발송 규격]\n수신: ${r.church_name} (${r.pastor} 목사 귀하)\n주소: ${zip ? `(${zip}) ` : ""}${addr}`;
+    } else if (type === "PACKAGE") {
+      text = `[택배/선물 발송 정보]\n받는분: ${r.pastor} 목사 (${r.church_name})\n우편번호: ${zip || "미입력"}\n배송주소: ${addr}`;
+    } else {
+      text = `${r.church_name}\t${r.pastor}\t${r.region}\t${zip}\t${addr}\t${r.homepage || ""}`;
+    }
   }
 
   navigator.clipboard.writeText(text).then(() => {
     showToast(`클립보드에 복사되었습니다 (${type === "OFFICIAL" ? "공문용" : type === "PACKAGE" ? "택배/선물용" : "TSV"}).`);
+  }).catch((err) => {
+    console.error("Clipboard copy failed:", err);
+    showToast("클립보드 복사에 실패했습니다.");
   });
 };
+
+function setupFileOperations() {
+  const btnOpen = document.getElementById("btn-open-excel");
+  if (btnOpen) {
+    btnOpen.addEventListener("click", async () => {
+      if (window.pywebview) {
+        showToast("파일 선택 대화상자를 여는 중입니다...");
+        const res = await callApi("load_excel");
+        if (res) {
+          currentMode = res.mode;
+          masterRecords = res.master_records || [];
+          simpleRecords = res.simple_records || [];
+          stats = res.stats || {};
+          updateLoadedFileIndicator(res.file_path);
+          renderModeUI();
+          renderDashboard();
+          renderGroundingList();
+          renderAnalytics();
+          showToast(`파일 로드 완료 (${res.mode === "MASTER" ? "마스터 관리 모드" : "간편 주소록 모드"}, 총 ${res.total_count || masterRecords.length || simpleRecords.length}건)`);
+        }
+      } else {
+        showToast("데스크톱 모드(pywebview)에서 엑셀 파일 열기가 지원됩니다.");
+      }
+    });
+  }
+
+  const btnSave = document.getElementById("btn-save-excel");
+  if (btnSave) {
+    btnSave.addEventListener("click", async () => {
+      if (window.pywebview) {
+        showToast("저장 중입니다...");
+        const res = await callApi("save_excel");
+        if (res) {
+          updateLoadedFileIndicator(res.file_path);
+          showToast(`파일 저장 완료: ${res.file_path}`);
+        }
+      } else {
+        showToast("데스크톱 모드에서 저장이 지원됩니다.");
+      }
+    });
+  }
+
+  const btnExport = document.getElementById("btn-export-excel");
+  if (btnExport) {
+    btnExport.addEventListener("click", async () => {
+      if (window.pywebview) {
+        if (currentMode === "SIMPLE") {
+          showToast("간편 주소록(7개 정제 컬럼)을 내보내는 중입니다...");
+          const res = await callApi("export_simple_address_book");
+          if (res) showToast(`간편 주소록 내보내기 완료: ${res.file_path}`);
+        } else {
+          showToast("마스터 엑셀을 내보내는 중입니다...");
+          const res = await callApi("save_excel");
+          if (res) showToast(`마스터 엑셀 저장 완료: ${res.file_path}`);
+        }
+      } else {
+        showToast("데스크톱 모드에서 내보내기가 지원됩니다.");
+      }
+    });
+  }
+
+  const btnExportDispatch = document.getElementById("btn-export-dispatch");
+  if (btnExportDispatch) {
+    btnExportDispatch.addEventListener("click", async () => {
+      if (window.pywebview) {
+        showToast("발송 명단 엑셀을 생성하는 중입니다...");
+        const res = await callApi("export_dispatch_list");
+        if (res) showToast(`발송 명단 엑셀 저장 완료 (${res.count}건): ${res.file_path}`);
+      } else {
+        showToast("데스크톱 모드에서 발송 명단 엑셀 저장이 가능합니다.");
+      }
+    });
+  }
+}
+
+function updateLoadedFileIndicator(filePath) {
+  const indicator = document.getElementById("loaded-file-indicator");
+  if (indicator) {
+    if (filePath) {
+      const fileName = filePath.split(/[\\/]/).pop();
+      indicator.innerText = `현재 파일: ${fileName} (${filePath})`;
+    } else {
+      indicator.innerText = "현재 파일: 샘플 데이터";
+    }
+  }
+}
 
 // --- Analytics View ---
 
