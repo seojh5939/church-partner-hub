@@ -52,15 +52,16 @@
 - [x] Python 백엔드 ↔ JS 프론트엔드 간 양방향 IPC 통신 브릿지 (`src/bridge.py`)
 - [x] Phase 1 단위 테스트 및 Smoke 테스트 통과 (`tests/test_models.py`, `tests/test_bridge.py`)
 
-### Phase 2: 이원화 엑셀 엔진 & 공문/선물 퀵서처
-- [ ] `ExcelEngine` 구현 (`src/core/excel_engine.py`):
+### Phase 2: 이원화 엑셀 엔진 & 공문/선물 퀵서처 (완료)
+- [x] `ExcelEngine` 구현 (`src/core/excel_engine.py`):
   - **마스터 모드**: 사용자 구글 스프레드시트 17개 기본 컬럼 보존 및 서식/수식 손상 없는 입출력, 부가 컬럼(`우편번호`, `홈페이지`, `주소검증상태`, `홈페이지검증상태`, `Obsidian링크`) 자동 관리
   - **간편 주소록 모드**: 외부 사용자의 3개 헤더(`[담임목사, 지역, 교회명]`) 자동 인식 및 7개 정제 컬럼(`[교회명, 담임목사, 지역, 도로명 주소, 우편번호, 홈페이지, 검증 상태]`) 간이 엑셀/CSV 생성
   - 엑셀 파일 락 충돌 방지(임시 파일 원자적 교체 및 파일 열림 사전 감지)
-- [ ] `DispatchManager` 구현 (`src/core/dispatch.py`):
+- [x] `DispatchManager` 구현 (`src/core/dispatch.py`):
   - 교회명 초성 검색(`ㄱㅈㅅ` ➡️ 광주겨자씨교회) 및 목회자명 필터
   - 공문용 규격 텍스트 / 택배 선물용 규격 텍스트 / 스프레드시트용 TSV 원클릭 클립보드 복사
   - 선택 교회 일괄 발송용 미니 엑셀 다운로드
+- [x] Phase 2 단위 테스트 및 통합 브릿지 테스트 통과 (`tests/test_excel_engine.py`, `tests/test_dispatch.py`, `tests/test_bridge.py`)
 
 ### Phase 3: 2단계 하이브리드 주소·홈페이지 추정기 & 대화형 Grounding 검증 UI
 - [ ] `AddressGrounder` 구현 (`src/core/grounder.py`):
