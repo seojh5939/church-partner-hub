@@ -105,11 +105,18 @@
 - [x] Phase 4 단위 테스트 및 브릿지/스모크 테스트 45건 100% 통과 (`tests/test_analytics.py`, `tests/test_bridge.py`, `src/main.py --smoke-test`)
 
 ### Phase 5: 옵시디언 ↔ 엑셀 스마트 동기화 모드
-- [ ] `ObsidianBridge` 구현 (`src/sync/obsidian_bridge.py`):
-  - 설정에서 `볼트 경로` 지정 시 활성화
+- [x] `ObsidianBridge` 구현 (`src/sync/obsidian_bridge.py`):
+  - 설정에서 `볼트 경로` 지정 시 활성화 및 상태 검증
+  - **Frontmatter 및 본문 보존**: Dataview 쿼리나 본문 텍스트 손상 없는 엄격한 YAML 파싱/직렬화
   - **Diff 대조 및 해결**: 엑셀 ↔ 옵시디언 Frontmatter 불일치 시 사용자 선택(엑셀 기준 / 옵시디언 기준)
   - **상호 보완 (Gap-fill)**: 엑셀 신규 교회 ➡️ `20. Churches/{교회명}.md` 템플릿 자동 생성, 옵시디언 신규 교회 ➡️ 엑셀 행 추가 제안
   - 엑셀 내 `obsidian://` 딥링크 자동 생성
+- [x] 옵시디언 스마트 동기화 UI 구축 (`src/ui/index.html`, `src/ui/js/app.js`, `src/ui/css/style.css`):
+  - 볼트 연결 상태 및 4대 KPI 카드 (In-Sync, Diffs, 볼트 누락, 엑셀 누락)
+  - 정보 불일치 대조 및 원클릭 해결 카드 UI
+  - 누락 노트 개별/일괄 자동 생성 UI
+  - 옵시디언 전용 교회 엑셀 가져오기 UI
+- [x] Phase 5 단위 테스트 및 브릿지/스모크 테스트 55건 100% 통과 (`tests/test_obsidian_sync.py`, `src/main.py --smoke-test`)
 
 ### Phase 6: 포터블 윈도우 `.exe` 패키징 및 최종 검증
 - [ ] PyInstaller 스펙 파일 (`church_partner_hub.spec`) 구성 (웹 정적 에셋 번들링, 경량화)

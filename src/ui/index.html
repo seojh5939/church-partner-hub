@@ -37,6 +37,7 @@
     <button class="tab-item" data-tab="tab-grounding">🔍 주소 & 홈페이지 검증</button>
     <button class="tab-item" data-tab="tab-quick">⚡ 공문/선물 퀵서처</button>
     <button class="tab-item" id="tab-btn-analytics" data-tab="tab-analytics">📈 지역별 교세 분석</button>
+    <button class="tab-item" id="tab-btn-obsidian" data-tab="tab-obsidian">🔮 옵시디언 동기화</button>
     <button class="tab-item" data-tab="tab-settings">⚙️ 환경 설정</button>
   </nav>
 
@@ -251,7 +252,148 @@
       </div>
     </section>
 
-    <!-- 5. 환경 설정 탭 -->
+    <!-- 5. 옵시디언 스마트 동기화 탭 (마스터 모드 전용) -->
+    <section class="tab-panel" id="tab-obsidian">
+      <!-- 볼트 연결 상태 헤더 카드 -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:16px;font-weight:700">🔮 옵시디언 ↔ 엑셀 스마트 동기화 스튜디오</span>
+              <span class="badge" id="obsidian-status-badge" style="background:var(--success-light);color:var(--success);font-weight:700">
+                연결 확인 중...
+              </span>
+            </div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:4px" id="obsidian-vault-path-display">
+              볼트 경로: 확인 중...
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn btn-secondary btn-sm" id="btn-recheck-obsidian">
+              🔄 볼트 재스캔 & Diff 분석
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="document.querySelector('[data-tab=tab-settings]').click()">
+              ⚙️ 볼트 경로 설정
+            </button>
+          </div>
+        </div>
+
+        <!-- 볼트 동기화 4대 요약 KPI -->
+        <div class="analytics-summary-grid" style="margin-top:16px">
+          <div class="stat-card">
+            <div class="stat-label">상호 일치 (In-Sync)</div>
+            <div class="stat-value" id="obs-kpi-sync" style="color:var(--success)">0건</div>
+            <div class="stat-sub">엑셀 ⇋ 볼트 정보 완벽 일치</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">정보 불일치 (Diffs)</div>
+            <div class="stat-value" id="obs-kpi-diff" style="color:var(--warning)">0건</div>
+            <div class="stat-sub">필드별 대조 및 해결 필요</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">볼트 누락 (엑셀 ➡️ 볼트)</div>
+            <div class="stat-value" id="obs-kpi-missing-vault" style="color:var(--primary)">0건</div>
+            <div class="stat-sub">마크다운 노트 자동 생성 가능</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">엑셀 누락 (볼트 ➡️ 엑셀)</div>
+            <div class="stat-value" id="obs-kpi-missing-excel" style="color:#8b5cf6">0건</div>
+            <div class="stat-sub">엑셀 마스터 행 추가 제안</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 서브 섹션 1: 정보 불일치 해결 (Diff Resolution) -->
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <div style="font-size:15px;font-weight:700">⚡ 정보 불일치 대조 & 상호 해결 (Diff Resolution)</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+              엑셀과 옵시디언의 정보가 다른 항목입니다. 적용하고자 하는 기준(엑셀 또는 옵시디언)을 선택하여 즉시 동기화합니다.
+            </div>
+          </div>
+        </div>
+        <div id="obsidian-diff-list" style="display:flex;flex-direction:column;gap:12px">
+          <div style="text-align:center;color:var(--text-muted);padding:24px">
+            Diff 분석 중입니다...
+          </div>
+        </div>
+      </div>
+
+      <!-- 서브 섹션 2: 누락 노트 생성 (엑셀 ➡️ 옵시디언 Gap-fill) -->
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-size:15px;font-weight:700">📝 볼트 누락 교회 노트 자동 생성 (엑셀 ➡️ 옵시디언)</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+              엑셀에는 등록되어 있으나 옵시디언 <code>20. Churches</code>에 없는 교회입니다. 템플릿 기반으로 노트를 자동 생성합니다.
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btn-create-all-missing-notes">
+            ⚡ 누락 노트 전체 일괄 자동 생성
+          </button>
+        </div>
+        <div class="table-container" style="max-height:280px;overflow-y:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:45px">No</th>
+                <th>교회명</th>
+                <th>담임목사</th>
+                <th>교단</th>
+                <th>지역</th>
+                <th>성도 수</th>
+                <th>관리 등급</th>
+                <th style="width:110px;text-align:center">액션</th>
+              </tr>
+            </thead>
+            <tbody id="obsidian-missing-vault-tbody">
+              <tr>
+                <td colspan="8" style="text-align:center;color:var(--text-muted);padding:20px">
+                  데이터를 불러오는 중입니다...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 서브 섹션 3: 엑셀 행 추가 제안 (옵시디언 ➡️ 엑셀 Gap-fill) -->
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <div style="font-size:15px;font-weight:700">📥 옵시디언 전용 교회 엑셀 가져오기 (옵시디언 ➡️ 엑셀)</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+              옵시디언 볼트에는 있으나 엑셀 마스터시트에 없는 교회입니다. 원클릭으로 엑셀 새 행으로 등록합니다.
+            </div>
+          </div>
+        </div>
+        <div class="table-container" style="max-height:280px;overflow-y:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:45px">No</th>
+                <th>교회명</th>
+                <th>담임목사</th>
+                <th>교단</th>
+                <th>지역</th>
+                <th>관리 등급</th>
+                <th style="width:130px;text-align:center">액션</th>
+              </tr>
+            </thead>
+            <tbody id="obsidian-missing-excel-tbody">
+              <tr>
+                <td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">
+                  데이터를 불러오는 중입니다...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. 환경 설정 탭 -->
     <section class="tab-panel" id="tab-settings">
       <div class="card">
         <div class="card-title" style="margin-bottom:16px">시스템 환경 설정</div>
