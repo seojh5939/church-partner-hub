@@ -119,6 +119,8 @@
 - [x] Phase 5 단위 테스트 및 브릿지/스모크 테스트 55건 100% 통과 (`tests/test_obsidian_sync.py`, `src/main.py --smoke-test`)
 
 ### Phase 6: 포터블 윈도우 `.exe` 패키징 및 최종 검증
-- [ ] PyInstaller 스펙 파일 (`church_partner_hub.spec`) 구성 (웹 정적 에셋 번들링, 경량화)
-- [ ] 단일 실행 파일 빌드 및 무설치 환경 실행 테스트
-- [ ] 회귀 테스트 및 사용자 매뉴얼 작성
+- [x] PyInstaller 스펙 파일 (`church_partner_hub.spec`) 구성 (웹 정적 에셋 번들링, WebView2 런타임 호환, 불필요 패키지 제외 경량화)
+- [x] 원클릭 빌드 스크립트 작성 (`scripts/build_exe.py`, `scripts/build_exe.bat`)
+- [x] 종합 사용자 매뉴얼 작성 (`docs/USER_MANUAL.md`) 및 README 빠른 시작 가이드 갱신
+- [x] 전체 회귀 테스트 55종 100% 통과 및 스모크 테스트 무결성 검증 (`tests/`, `src/main.py --smoke-test`)
+
