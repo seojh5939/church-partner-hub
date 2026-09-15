@@ -135,9 +135,23 @@ def test_excel_load_and_save_via_bridge(bridge, tmp_path):
 
 
 def test_analytics(bridge):
+    # 1. 전체 분석
     res = bridge.get_analytics()
     assert res["success"] is True
     data = res["data"]
     assert data["summary"]["total_churches"] >= 4
     assert len(data["denomination_distribution"]) > 0
-    assert len(data["scale_distribution"]) > 0
+    assert len(data["scale_distribution"]) == 6
+    assert "crosstab" in data
+    assert data["crosstab"]["grand_total"] == data["summary"]["total_churches"]
+
+    # 2. 드릴다운 필터 (교단 및 규모)
+    drilldown = bridge.get_analytics(denomination_filter="예장합동", scale_filter="초대형 (3000~)")
+    assert drilldown["success"] is True
+    d_data = drilldown["data"]
+    assert d_data["applied_filters"]["denomination"] == "예장합동"
+    assert d_data["applied_filters"]["scale"] == "초대형 (3000~)"
+    for c in d_data["churches"]:
+        assert c["denomination"] == "예장합동"
+        assert c["congregation_size"] >= 3000
+

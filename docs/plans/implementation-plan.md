@@ -81,7 +81,7 @@
 - [x] Phase 3 단위 테스트 및 브릿지/보안 테스트 37건 100% 통과 (`tests/test_grounder.py`, `tests/test_bridge.py`)
 
 ### Phase 4: 지역별 교세·교단·규모 분석 엔진 & 시각화 (User Requirements)
-- [ ] `AnalyticsEngine` 구현 (`src/core/analytics.py`):
+- [x] `AnalyticsEngine` 구현 (`src/core/analytics.py`):
   1. **지역별 기본 통계**:
      - 지역별 등록 교회 수, 총 성도 수, 평균 성도 수
   2. **지역별 교단(Denomination) 분포**:
@@ -96,10 +96,13 @@
      - *(성도 수 누락 교회: '규모 미입력' 카테고리)*
   4. **규모별 교회 수 및 분포도(Distribution)**:
      - 각 규모 구간별 교회 수(개) 및 비율(%) 산출
-     - 교단 × 규모 교차 집계표 (Cross-tabulation)
-- [ ] 인터랙티브 교세 대시보드 뷰 (`src/ui/analytics.html`):
-  - 지역별 규모 분포 누적 바 차트(Stacked Bar) 및 교단/규모 도넛 차트
-  - **드릴다운(Drill-down)**: 특정 지역/교단/규모 클릭 시 하단에 해당 교회 상세 목록(교회명, 담임목사, 성도 수, 교단, 관리등급, 주소) 즉시 필터링 표시
+     - 교단 × 규모 교차 집계표 (Cross-tabulation Matrix)
+- [x] 인터랙티브 교세 대시보드 뷰 (`src/ui/index.html`, `src/ui/js/app.js`, `src/ui/css/style.css`):
+  - 4대 요약 통계 카드(총 교회, 총 성도, 평균 성도, 입력률)
+  - 지역별/교단별/규모별 인터랙티브 막대 차트
+  - 교단 × 규모 교차 집계표 (Matrix Table): 셀 클릭 시 해당 조건 실시간 드릴다운
+  - **드릴다운(Drill-down)**: 활성 필터 칩 표시 및 상세 교회 목록(교회명, 담임목사, 교단, 규모 세그먼트, 관리등급, 주소, 원클릭 복사) 실시간 필터링
+- [x] Phase 4 단위 테스트 및 브릿지/스모크 테스트 45건 100% 통과 (`tests/test_analytics.py`, `tests/test_bridge.py`, `src/main.py --smoke-test`)
 
 ### Phase 5: 옵시디언 ↔ 엑셀 스마트 동기화 모드
 - [ ] `ObsidianBridge` 구현 (`src/sync/obsidian_bridge.py`):

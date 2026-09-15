@@ -66,7 +66,24 @@ def main() -> None:
         assert cand["is_dependent_uncertain"] is True and cand["confidence_level"] == "LOW"
         print("[Smoke-Test] HomepageGrounder & Cascading Uncertainty policy verified.")
 
-        print("[Smoke-Test] All Phase 1, 2 & 3 components operational.")
+        # Phase 4 component smoke test (AnalyticsEngine, Crosstab & Drilldown)
+        analytics_res = bridge.get_analytics()
+        assert analytics_res["success"] is True
+        analytics_data = analytics_res["data"]
+        assert analytics_data["summary"]["total_churches"] == len(state["data"]["master_records"])
+        assert "crosstab" in analytics_data
+        assert analytics_data["crosstab"]["grand_total"] == len(state["data"]["master_records"])
+        assert len(analytics_data["denomination_distribution"]) > 0
+        assert len(analytics_data["scale_distribution"]) == 6
+
+        # Phase 4 Drill-down verification
+        drilldown_res = bridge.get_analytics(denomination_filter="예장합동")
+        assert drilldown_res["success"] is True
+        assert drilldown_res["data"]["drilldown_count"] > 0
+        assert all(c["denomination"] == "예장합동" for c in drilldown_res["data"]["churches"])
+        print(f"[Smoke-Test] AnalyticsEngine & Drilldown verified: {analytics_data['summary']['total_churches']} churches, {len(analytics_data['crosstab']['rows'])} denominations.")
+
+        print("[Smoke-Test] All Phase 1, 2, 3 & 4 components operational.")
         return
 
     import webview  # type: ignore

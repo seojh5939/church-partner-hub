@@ -1,5 +1,6 @@
 """Core service engines and domain models for church-partner-hub."""
 
+from src.core.analytics import AnalyticsEngine, SCALE_CATEGORIES
 from src.core.dispatch import DispatchManager, extract_chosung, is_chosung_only
 from src.core.excel_engine import ExcelEngine, ExcelFileLockedError
 from src.core.grounder import AddressGrounder
@@ -25,4 +26,6 @@ __all__ = [
     "is_chosung_only",
     "AddressGrounder",
     "HomepageGrounder",
+    "AnalyticsEngine",
+    "SCALE_CATEGORIES",
 ]
