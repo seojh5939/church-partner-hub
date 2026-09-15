@@ -13,6 +13,7 @@ let analyticsFilter = {
   denomination: "전체",
   scale: "전체",
 };
+let obsidianVaultPath = "C:\\Users\\20260602\\Documents\\github\\Obsidian";
 
 // Wait for pywebview to initialize
 window.addEventListener("pywebviewready", () => {
@@ -28,6 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupQuickSearch();
   setupFileOperations();
   setupAnalytics();
+  setupObsidianSync();
 
   // If pywebview is not loaded within 500ms, use mock data
   setTimeout(() => {
@@ -100,6 +102,11 @@ async function loadInitialState() {
     masterRecords = data.master_records || [];
     simpleRecords = data.simple_records || [];
     stats = data.stats || {};
+    if (data.obsidian_vault_path) {
+      obsidianVaultPath = data.obsidian_vault_path;
+      const pathInput = document.getElementById("settings-obsidian-path");
+      if (pathInput) pathInput.value = obsidianVaultPath;
+    }
     renderModeUI();
     renderDashboard();
     renderGroundingList();
@@ -235,15 +242,18 @@ function renderModeUI() {
   const btnMaster = document.getElementById("mode-master-btn");
   const btnSimple = document.getElementById("mode-simple-btn");
   const analyticsTabBtn = document.getElementById("tab-btn-analytics");
+  const obsidianTabBtn = document.getElementById("tab-btn-obsidian");
 
   if (currentMode === "MASTER") {
     btnMaster.classList.add("active");
     btnSimple.classList.remove("active");
     if (analyticsTabBtn) analyticsTabBtn.style.display = "flex";
+    if (obsidianTabBtn) obsidianTabBtn.style.display = "flex";
   } else {
     btnSimple.classList.add("active");
     btnMaster.classList.remove("active");
     if (analyticsTabBtn) analyticsTabBtn.style.display = "none";
+    if (obsidianTabBtn) obsidianTabBtn.style.display = "none";
   }
 }
 
@@ -265,6 +275,8 @@ function setupTabs() {
         document.getElementById("quick-search-input").focus();
       } else if (targetId === "tab-analytics") {
         renderAnalytics();
+      } else if (targetId === "tab-obsidian") {
+        loadObsidianSync();
       }
     });
   });
@@ -1271,6 +1283,333 @@ function calculateMockAnalytics(records, filter) {
     drilldown_count: churches.length,
     applied_filters: { region, denomination: denom, scale },
   };
+}
+
+// --- Phase 5: Obsidian Smart Sync Logic ---
+
+function setupObsidianSync() {
+  const btnRecheck = document.getElementById("btn-recheck-obsidian");
+  if (btnRecheck) {
+    btnRecheck.addEventListener("click", () => {
+      loadObsidianSync();
+    });
+  }
+
+  const btnCreateAll = document.getElementById("btn-create-all-missing-notes");
+  if (btnCreateAll) {
+    btnCreateAll.addEventListener("click", () => {
+      createAllMissingObsidianNotes();
+    });
+  }
+
+  // 환경 설정 탭의 볼트 경로 저장 연동
+  const settingsVaultInput = document.getElementById("settings-obsidian-path");
+  if (settingsVaultInput) {
+    settingsVaultInput.addEventListener("change", async (e) => {
+      obsidianVaultPath = e.target.value.trim();
+      if (window.pywebview) {
+        await callApi("set_obsidian_vault_path", obsidianVaultPath);
+      }
+    });
+  }
+}
+
+async function loadObsidianSync() {
+  const statusBadge = document.getElementById("obsidian-status-badge");
+  const pathDisplay = document.getElementById("obsidian-vault-path-display");
+  if (pathDisplay) {
+    pathDisplay.innerText = `볼트 경로: ${obsidianVaultPath}`;
+  }
+
+  let status = null;
+  let diffData = null;
+
+  if (window.pywebview) {
+    status = await callApi("check_obsidian_status", obsidianVaultPath);
+    diffData = await callApi("diff_obsidian", obsidianVaultPath);
+  }
+
+  if (!status) {
+    // Mock Fallback
+    status = {
+      valid: true,
+      vault_name: "Obsidian",
+      has_churches_dir: true,
+      churches_count: 3,
+      has_template: true,
+    };
+  }
+
+  if (!diffData) {
+    // Mock Diff Fallback
+    diffData = {
+      success: true,
+      in_sync_count: 1,
+      diff_count: 1,
+      missing_in_vault_count: 2,
+      missing_in_excel_count: 1,
+      diffs: [
+        {
+          row_id: 2,
+          church_name: "광주동성교회",
+          field: "pastor",
+          label: "담임목사",
+          excel_val: "안성주",
+          obsidian_val: "홍길동",
+          obsidian_link: "obsidian://open?vault=Obsidian&file=20.%20Churches%2F광주동성교회",
+        },
+      ],
+      missing_in_vault: masterRecords.slice(2).map((r) => r),
+      missing_in_excel: [
+        {
+          church_name: "서울새빛교회",
+          pastor: "김바울",
+          denomination: "백석",
+          region: "서울",
+          tier: "B",
+          obsidian_link: "obsidian://open?vault=Obsidian&file=20.%20Churches%2F서울새빛교회",
+        },
+      ],
+    };
+  }
+
+  renderObsidianSync(diffData, status);
+}
+
+function renderObsidianSync(data, status) {
+  // 1. Status Badge
+  const statusBadge = document.getElementById("obsidian-status-badge");
+  if (statusBadge) {
+    if (status && status.valid) {
+      statusBadge.innerText = `🟢 볼트 연결됨 (${status.churches_count || 0}개 노트 인식)`;
+      statusBadge.style.background = "var(--success-light)";
+      statusBadge.style.color = "var(--success)";
+    } else {
+      statusBadge.innerText = `🔴 연결 실패 (${status ? status.error : "경로 확인 필요"})`;
+      statusBadge.style.background = "var(--danger-light)";
+      statusBadge.style.color = "var(--danger)";
+    }
+  }
+
+  // 2. 4 KPIs
+  const elSync = document.getElementById("obs-kpi-sync");
+  const elDiff = document.getElementById("obs-kpi-diff");
+  const elMissingVault = document.getElementById("obs-kpi-missing-vault");
+  const elMissingExcel = document.getElementById("obs-kpi-missing-excel");
+
+  if (elSync) elSync.innerText = `${data.in_sync_count || 0}건`;
+  if (elDiff) elDiff.innerText = `${data.diff_count || 0}건`;
+  if (elMissingVault) elMissingVault.innerText = `${data.missing_in_vault_count || 0}건`;
+  if (elMissingExcel) elMissingExcel.innerText = `${data.missing_in_excel_count || 0}건`;
+
+  // 3. Diff List
+  const diffContainer = document.getElementById("obsidian-diff-list");
+  if (diffContainer) {
+    diffContainer.innerHTML = "";
+    const diffs = data.diffs || [];
+    if (diffs.length === 0) {
+      diffContainer.innerHTML = `
+        <div style="text-align:center;padding:28px;background:#f8fafc;border-radius:8px;border:1px solid var(--border)">
+          <span style="font-size:20px">🎉</span>
+          <div style="font-weight:700;margin-top:6px">엑셀과 옵시디언의 모든 정보가 완벽히 일치합니다!</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">해결이 필요한 정보 불일치(Conflict)가 없습니다.</div>
+        </div>
+      `;
+    } else {
+      diffs.forEach((d) => {
+        const card = document.createElement("div");
+        card.className = "obsidian-diff-card";
+        card.innerHTML = `
+          <div class="obsidian-diff-header">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:15px;font-weight:700">${escapeHtml(d.church_name)}</span>
+              <span class="badge" style="background:var(--warning-light);color:var(--warning);font-weight:700">
+                ${escapeHtml(d.label || d.field)} 불일치
+              </span>
+            </div>
+            ${
+              d.obsidian_link
+                ? `<a href="${d.obsidian_link}" class="btn btn-secondary btn-sm" style="text-decoration:none" title="옵시디언 앱에서 바로 열기">
+                    🔗 옵시디언 열기
+                  </a>`
+                : ""
+            }
+          </div>
+          <div class="obsidian-diff-compare-box">
+            <!-- 엑셀 기준 -->
+            <div class="obsidian-diff-side">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:12px;font-weight:700;color:#1d4ed8">📊 엑셀 마스터시트 값</span>
+                <button class="btn btn-secondary btn-sm" onclick="resolveObsidianDiff(${d.row_id}, '${escapeHtml(d.field)}', 'USE_EXCEL')">
+                  엑셀 기준 적용 ➡️
+                </button>
+              </div>
+              <div class="obsidian-diff-val excel">${escapeHtml(d.excel_val || "(비어있음)")}</div>
+              <div style="font-size:11px;color:var(--text-muted)">클릭 시 옵시디언 마크다운 Frontmatter를 엑셀 값으로 갱신합니다.</div>
+            </div>
+            <!-- 옵시디언 기준 -->
+            <div class="obsidian-diff-side">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:12px;font-weight:700;color:#7e22ce">🔮 옵시디언 볼트 값</span>
+                <button class="btn btn-secondary btn-sm" onclick="resolveObsidianDiff(${d.row_id}, '${escapeHtml(d.field)}', 'USE_OBSIDIAN')">
+                  ⬅️ 옵시디언 기준 적용
+                </button>
+              </div>
+              <div class="obsidian-diff-val obsidian">${escapeHtml(d.obsidian_val || "(비어있음)")}</div>
+              <div style="font-size:11px;color:var(--text-muted)">클릭 시 엑셀 레코드의 해당 필드를 옵시디언 값으로 갱신합니다.</div>
+            </div>
+          </div>
+        `;
+        diffContainer.appendChild(card);
+      });
+    }
+  }
+
+  // 4. Missing in Vault Table
+  const tbodyMissingVault = document.getElementById("obsidian-missing-vault-tbody");
+  if (tbodyMissingVault) {
+    const missingVault = data.missing_in_vault || [];
+    if (missingVault.length === 0) {
+      tbodyMissingVault.innerHTML = `
+        <tr>
+          <td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">
+            모든 엑셀 등록 교회의 마크다운 노트가 옵시디언 볼트에 존재합니다.
+          </td>
+        </tr>
+      `;
+    } else {
+      tbodyMissingVault.innerHTML = "";
+      missingVault.forEach((r, idx) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td style="color:var(--text-muted);font-size:12px">${idx + 1}</td>
+          <td style="font-weight:600">${escapeHtml(r.church_name)}</td>
+          <td>${escapeHtml(r.pastor || "")}</td>
+          <td><span class="badge" style="background:#f1f5f9">${escapeHtml(r.denomination || "미지정")}</span></td>
+          <td>${escapeHtml(r.region || "-")}</td>
+          <td>${r.congregation_size ? r.congregation_size.toLocaleString() + "명" : '<span style="color:var(--text-muted)">미입력</span>'}</td>
+          <td><span class="badge ${r.tier === "A" ? "badge-verified" : "badge-manual"}">${escapeHtml(r.tier || "-")}</span></td>
+          <td style="text-align:center">
+            <button class="btn btn-primary btn-sm" onclick="createSingleObsidianNote(${r.row_id})">
+              📝 노트 생성
+            </button>
+          </td>
+        `;
+        tbodyMissingVault.appendChild(tr);
+      });
+    }
+  }
+
+  // 5. Missing in Excel Table
+  const tbodyMissingExcel = document.getElementById("obsidian-missing-excel-tbody");
+  if (tbodyMissingExcel) {
+    const missingExcel = data.missing_in_excel || [];
+    if (missingExcel.length === 0) {
+      tbodyMissingExcel.innerHTML = `
+        <tr>
+          <td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">
+            옵시디언 볼트의 모든 교회가 엑셀 마스터시트에 등록되어 있습니다.
+          </td>
+        </tr>
+      `;
+    } else {
+      tbodyMissingExcel.innerHTML = "";
+      missingExcel.forEach((item, idx) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td style="color:var(--text-muted);font-size:12px">${idx + 1}</td>
+          <td style="font-weight:600">
+            ${escapeHtml(item.church_name)}
+            ${
+              item.obsidian_link
+                ? `<a href="${item.obsidian_link}" style="text-decoration:none;margin-left:4px" title="옵시디언에서 열기">🔗</a>`
+                : ""
+            }
+          </td>
+          <td>${escapeHtml(item.pastor || "")}</td>
+          <td><span class="badge" style="background:#f1f5f9">${escapeHtml(item.denomination || "미지정")}</span></td>
+          <td>${escapeHtml(item.region || "-")}</td>
+          <td><span class="badge ${item.tier === "A" ? "badge-verified" : "badge-manual"}">${escapeHtml(item.tier || "-")}</span></td>
+          <td style="text-align:center">
+            <button class="btn btn-secondary btn-sm" onclick="importSingleObsidianChurch('${escapeHtml(item.church_name)}')">
+              📥 엑셀로 가져오기
+            </button>
+          </td>
+        `;
+        tbodyMissingExcel.appendChild(tr);
+      });
+    }
+  }
+}
+
+async function resolveObsidianDiff(rowId, field, choice) {
+  if (window.pywebview) {
+    showToast("불일치 정보를 해결하는 중...");
+    const res = await callApi("resolve_obsidian_diff", rowId, field, choice, obsidianVaultPath);
+    if (res) {
+      const msg =
+        choice === "USE_EXCEL"
+          ? "옵시디언 마크다운 Frontmatter가 엑셀 값으로 갱신되었습니다."
+          : "엑셀 레코드가 옵시디언 값으로 갱신되었습니다.";
+      showToast(msg);
+      // 레코드 동기화
+      if (res.record) {
+        const idx = masterRecords.findIndex((r) => r.row_id === rowId);
+        if (idx !== -1) masterRecords[idx] = res.record;
+      }
+      await loadObsidianSync();
+      renderDashboard();
+    }
+  } else {
+    showToast(`${choice === "USE_EXCEL" ? "엑셀" : "옵시디언"} 기준으로 동기화 완료 (미리보기 모드)`);
+    await loadObsidianSync();
+  }
+}
+
+async function createSingleObsidianNote(rowId) {
+  if (window.pywebview) {
+    showToast("옵시디언 마크다운 노트를 생성하는 중...");
+    const res = await callApi("create_obsidian_note", rowId, obsidianVaultPath);
+    if (res) {
+      showToast(`노트 생성 완료: ${res.church_name}.md`);
+      await loadObsidianSync();
+    }
+  } else {
+    showToast("노트 생성 완료 (미리보기 모드)");
+    await loadObsidianSync();
+  }
+}
+
+async function createAllMissingObsidianNotes() {
+  if (window.pywebview) {
+    showToast("누락된 모든 교회의 마크다운 노트를 일괄 생성하는 중...");
+    const res = await callApi("create_all_missing_notes", obsidianVaultPath);
+    if (res) {
+      showToast(`총 ${res.created_count}개의 옵시디언 노트를 일괄 생성했습니다.`);
+      await loadObsidianSync();
+    }
+  } else {
+    showToast("일괄 생성 완료 (미리보기 모드)");
+    await loadObsidianSync();
+  }
+}
+
+async function importSingleObsidianChurch(churchName) {
+  if (window.pywebview) {
+    showToast("옵시디언 교회를 엑셀로 가져오는 중...");
+    const res = await callApi("import_obsidian_church", churchName, obsidianVaultPath);
+    if (res) {
+      if (res.record) {
+        masterRecords.push(res.record);
+      }
+      showToast(`엑셀 마스터 레코드에 [${churchName}] 추가 완료 (총 ${res.total_master_count}건)`);
+      await loadObsidianSync();
+      renderDashboard();
+    }
+  } else {
+    showToast(`엑셀에 [${churchName}] 추가 완료 (미리보기 모드)`);
+    await loadObsidianSync();
+  }
 }
 
 // --- Toast Helper ---

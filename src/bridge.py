@@ -12,6 +12,7 @@ from src.core.dispatch import DispatchManager
 from src.core.excel_engine import ExcelEngine, ExcelFileLockedError
 from src.core.grounder import AddressGrounder
 from src.core.homepage_grounder import HomepageGrounder
+from src.sync.obsidian_bridge import ObsidianBridge
 from src.core.models import (
     AddressCandidate,
     ChurchRecord,
@@ -38,6 +39,8 @@ class ChurchBridge:
         self.address_grounder = AddressGrounder()
         self.homepage_grounder = HomepageGrounder()
         self.analytics_engine = AnalyticsEngine()
+        self.obsidian_bridge = ObsidianBridge()
+        self.obsidian_vault_path: str = r"C:\Users\20260602\Documents\github\Obsidian"
         self.loaded_file_path: Optional[str] = None
         self._load_default_demo_data()
 
@@ -178,6 +181,7 @@ class ChurchBridge:
                 "master_records": [r.to_dict() for r in self.master_records],
                 "simple_records": [r.to_dict() for r in self.simple_records],
                 "stats": self._calculate_stats(),
+                "obsidian_vault_path": self.obsidian_vault_path,
             },
             "error": None,
         }
@@ -482,6 +486,104 @@ class ChurchBridge:
         )
         return {"success": True, "data": analytics_data, "error": None}
 
+    # --- Obsidian Smart Sync (Master Mode) ---
+
+    def set_obsidian_vault_path(self, vault_path: str) -> Dict[str, Any]:
+        """옵시디언 볼트 경로 설정 및 상태 검증."""
+        self.obsidian_vault_path = vault_path
+        status = self.obsidian_bridge.check_vault_status(vault_path)
+        return {"success": True, "data": status, "error": None}
+
+    def check_obsidian_status(self, vault_path: Optional[str] = None) -> Dict[str, Any]:
+        """옵시디언 볼트 유효성 및 템플릿 인식 상태 확인."""
+        target_path = vault_path or self.obsidian_vault_path
+        status = self.obsidian_bridge.check_vault_status(target_path)
+        return {"success": status["valid"], "data": status, "error": status["error"]}
+
+    def diff_obsidian(self, vault_path: Optional[str] = None) -> Dict[str, Any]:
+        """엑셀 마스터 레코드와 옵시디언 볼트 간의 Diff 분석."""
+        target_path = vault_path or self.obsidian_vault_path
+        res = self.obsidian_bridge.diff_records(self.master_records, target_path)
+        return {"success": res["success"], "data": res, "error": res["error"]}
+
+    def resolve_obsidian_diff(
+        self,
+        row_id: int,
+        field: str,
+        choice: str,
+        vault_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """엑셀 ⇋ 옵시디언 정보 불일치 해결 (USE_EXCEL 또는 USE_OBSIDIAN)."""
+        target_path = vault_path or self.obsidian_vault_path
+        record = self._find_record(row_id, "MASTER")
+        if not record:
+            return {"success": False, "data": None, "error": f"레코드를 찾을 수 없습니다: row_id={row_id}"}
+
+        res = self.obsidian_bridge.resolve_diff(target_path, record, field, choice)
+        return {
+            "success": res["success"],
+            "data": res,
+            "error": res.get("error"),
+            "record": record.to_dict(),
+        }
+
+    def create_obsidian_note(
+        self, row_id: int, vault_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """엑셀 레코드를 기반으로 신규 옵시디언 노트 자동 생성 (Gap-fill)."""
+        target_path = vault_path or self.obsidian_vault_path
+        record = self._find_record(row_id, "MASTER")
+        if not record:
+            return {"success": False, "data": None, "error": f"레코드를 찾을 수 없습니다: row_id={row_id}"}
+
+        res = self.obsidian_bridge.create_church_note(target_path, record)
+        return {"success": res["success"], "data": res, "error": res.get("error")}
+
+    def create_all_missing_notes(
+        self, vault_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """볼트에 누락된 모든 엑셀 교회의 마크다운 노트를 일괄 자동 생성."""
+        target_path = vault_path or self.obsidian_vault_path
+        diff_res = self.obsidian_bridge.diff_records(self.master_records, target_path)
+        if not diff_res["success"]:
+            return {"success": False, "data": None, "error": diff_res["error"]}
+
+        created_count = 0
+        errors = []
+        for item in diff_res["missing_in_vault"]:
+            rec = self._find_record(item["row_id"], "MASTER")
+            if rec:
+                c_res = self.obsidian_bridge.create_church_note(target_path, rec)
+                if c_res["success"]:
+                    created_count += 1
+                else:
+                    errors.append(f"{rec.church_name}: {c_res['error']}")
+
+        return {
+            "success": True,
+            "data": {"created_count": created_count, "errors": errors},
+            "error": None,
+        }
+
+    def import_obsidian_church(
+        self, church_name: str, vault_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """옵시디언 전용 교회를 엑셀 마스터 레코드 목록에 신규 행으로 가져오기 (Gap-fill)."""
+        target_path = vault_path or self.obsidian_vault_path
+        new_row_id = (max([r.row_id for r in self.master_records], default=0)) + 1
+        new_record = self.obsidian_bridge.import_obsidian_to_excel(
+            target_path, church_name, new_row_id
+        )
+        if not new_record:
+            return {"success": False, "data": None, "error": f"노트를 찾을 수 없습니다: {church_name}"}
+
+        self.master_records.append(new_record)
+        return {
+            "success": True,
+            "data": {"record": new_record.to_dict(), "total_master_count": len(self.master_records)},
+            "error": None,
+        }
+
     # --- Helper ---
 
     def _find_record(self, row_id: int, mode: str) -> Any:
@@ -494,3 +596,4 @@ class ChurchBridge:
                 if r.row_id == row_id:
                     return r
         return None
+

@@ -504,3 +504,61 @@ tr:hover {
   color: white;
 }
 
+/* --- Phase 5: Obsidian Sync & Diff Card Styling --- */
+.obsidian-diff-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 18px;
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.obsidian-diff-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 8px;
+}
+
+.obsidian-diff-compare-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 6px;
+}
+
+.obsidian-diff-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.obsidian-diff-val {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: white;
+  word-break: break-all;
+}
+
+.obsidian-diff-val.excel {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.obsidian-diff-val.obsidian {
+  border-color: #d8b4fe;
+  background: #faf5ff;
+  color: #7e22ce;
+}
+
+

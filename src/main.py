@@ -83,7 +83,31 @@ def main() -> None:
         assert all(c["denomination"] == "예장합동" for c in drilldown_res["data"]["churches"])
         print(f"[Smoke-Test] AnalyticsEngine & Drilldown verified: {analytics_data['summary']['total_churches']} churches, {len(analytics_data['crosstab']['rows'])} denominations.")
 
-        print("[Smoke-Test] All Phase 1, 2, 3 & 4 components operational.")
+        # Phase 5 component smoke test (ObsidianBridge Smart Sync)
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp_vault:
+            t_path = Path(temp_vault)
+            (t_path / "90. Templates").mkdir(parents=True, exist_ok=True)
+            (t_path / "20. Churches").mkdir(parents=True, exist_ok=True)
+            (t_path / "90. Templates" / "Template - Church (교회_조직).md").write_text(
+                "---\ntype: church\npastor: ''\n---\n# {{title}}\n\n## 🏢 개요\n",
+                encoding="utf-8",
+            )
+            obs_status = bridge.check_obsidian_status(temp_vault)
+            assert obs_status["success"] is True and obs_status["data"]["valid"] is True
+
+            # Create note test
+            note_res = bridge.create_obsidian_note(1, vault_path=temp_vault)
+            assert note_res["success"] is True
+            assert Path(note_res["data"]["file_path"]).exists()
+
+            # Diff test
+            diff_res = bridge.diff_obsidian(temp_vault)
+            assert diff_res["success"] is True
+            assert diff_res["data"]["in_sync_count"] >= 1
+            print(f"[Smoke-Test] ObsidianBridge verified: created note '{note_res['data']['church_name']}', link='{note_res['data']['obsidian_link']}'.")
+
+        print("[Smoke-Test] All Phase 1, 2, 3, 4 & 5 components operational.")
         return
 
     import webview  # type: ignore
