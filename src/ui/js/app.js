@@ -8,6 +8,11 @@ let currentMode = "MASTER";
 let masterRecords = [];
 let simpleRecords = [];
 let stats = {};
+let analyticsFilter = {
+  region: "전체",
+  denomination: "전체",
+  scale: "전체",
+};
 
 // Wait for pywebview to initialize
 window.addEventListener("pywebviewready", () => {
@@ -22,6 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupModeSwitch();
   setupQuickSearch();
   setupFileOperations();
+  setupAnalytics();
 
   // If pywebview is not loaded within 500ms, use mock data
   setTimeout(() => {
@@ -257,6 +263,8 @@ function setupTabs() {
 
       if (targetId === "tab-quick") {
         document.getElementById("quick-search-input").focus();
+      } else if (targetId === "tab-analytics") {
+        renderAnalytics();
       }
     });
   });
@@ -749,58 +757,520 @@ function updateLoadedFileIndicator(filePath) {
   }
 }
 
-// --- Analytics View ---
+// --- Phase 4: Analytics, Crosstab Matrix & Drill-down Logic ---
 
-function renderAnalytics() {
+const SCALE_COLORS = {
+  "소형 (~100)": "#10b981",
+  "중형 (100~500)": "#06b6d4",
+  "중대형 (500~1000)": "#3b82f6",
+  "대형 (1000~3000)": "#f59e0b",
+  "초대형 (3000~)": "#ef4444",
+  "미입력": "#94a3b8",
+};
+
+const SCALE_CATEGORIES_LIST = [
+  "소형 (~100)",
+  "중형 (100~500)",
+  "중대형 (500~1000)",
+  "대형 (1000~3000)",
+  "초대형 (3000~)",
+  "미입력",
+];
+
+function classifyScaleFrontend(size) {
+  if (size === null || size === undefined || size <= 0) return "미입력";
+  if (size < 100) return "소형 (~100)";
+  if (size < 500) return "중형 (100~500)";
+  if (size < 1000) return "중대형 (500~1000)";
+  if (size < 3000) return "대형 (1000~3000)";
+  return "초대형 (3000~)";
+}
+
+function setupAnalytics() {
+  const regionSelect = document.getElementById("analytics-region-select");
+  if (regionSelect) {
+    regionSelect.addEventListener("change", (e) => {
+      analyticsFilter.region = e.target.value;
+      renderAnalytics();
+    });
+  }
+
+  const btnReset = document.getElementById("btn-reset-analytics-filter");
+  if (btnReset) {
+    btnReset.addEventListener("click", () => {
+      resetAnalyticsFilter();
+    });
+  }
+}
+
+function resetAnalyticsFilter() {
+  analyticsFilter.region = "전체";
+  analyticsFilter.denomination = "전체";
+  analyticsFilter.scale = "전체";
+  const regionSelect = document.getElementById("analytics-region-select");
+  if (regionSelect) regionSelect.value = "전체";
+  renderAnalytics();
+}
+
+function setAnalyticsFilter(field, value) {
+  if (analyticsFilter[field] === value) {
+    analyticsFilter[field] = "전체";
+  } else {
+    analyticsFilter[field] = value;
+  }
+  renderAnalytics();
+}
+
+function setAnalyticsCellFilter(denom, scale) {
+  if (analyticsFilter.denomination === denom && analyticsFilter.scale === scale) {
+    analyticsFilter.denomination = "전체";
+    analyticsFilter.scale = "전체";
+  } else {
+    analyticsFilter.denomination = denom;
+    analyticsFilter.scale = scale;
+  }
+  renderAnalytics();
+}
+
+async function renderAnalytics() {
+  let data = null;
+
+  if (window.pywebview) {
+    const reg = analyticsFilter.region === "전체" ? null : analyticsFilter.region;
+    const den = analyticsFilter.denomination === "전체" ? null : analyticsFilter.denomination;
+    const sca = analyticsFilter.scale === "전체" ? null : analyticsFilter.scale;
+    data = await callApi("get_analytics", reg, den, sca);
+  }
+
+  if (!data) {
+    // Preview / Mock Fallback
+    data = calculateMockAnalytics(masterRecords, analyticsFilter);
+  }
+
+  if (!data) return;
+
+  // 1. Update Region Select Options
+  updateRegionSelectOptions(data.regional_breakdown);
+
+  // 2. Summary Metric Cards
+  const summary = data.summary || {};
+  const elTotalChurches = document.getElementById("analytics-total-churches");
+  const elRegionalShare = document.getElementById("analytics-regional-share");
+  const elTotalMembers = document.getElementById("analytics-total-members");
+  const elEnteredCount = document.getElementById("analytics-entered-count");
+  const elAvgMembers = document.getElementById("analytics-avg-members");
+  const elMaxMinMembers = document.getElementById("analytics-max-min-members");
+  const elEnteredRatio = document.getElementById("analytics-entered-ratio");
+  const elMissingCount = document.getElementById("analytics-missing-count");
+
+  if (elTotalChurches) elTotalChurches.innerText = `${summary.total_churches || 0}개`;
+  if (elRegionalShare) {
+    elRegionalShare.innerText =
+      analyticsFilter.region !== "전체"
+        ? `선택 지역: ${analyticsFilter.region}`
+        : "전체 지역 기준";
+  }
+  if (elTotalMembers) elTotalMembers.innerText = `${(summary.total_members || 0).toLocaleString()}명`;
+  if (elEnteredCount) elEnteredCount.innerText = `${summary.entered_count || 0}개 교회 합산`;
+  if (elAvgMembers) elAvgMembers.innerText = `${(summary.avg_members || 0).toLocaleString()}명`;
+  if (elMaxMinMembers) {
+    elMaxMinMembers.innerText = `최대 ${(summary.max_members || 0).toLocaleString()}명 / 최소 ${(summary.min_members || 0).toLocaleString()}명`;
+  }
+  if (elEnteredRatio) elEnteredRatio.innerText = `${summary.entered_ratio || 0}%`;
+  if (elMissingCount) elMissingCount.innerText = `미입력 ${summary.missing_count || 0}개`;
+
+  // 3. Denomination Distribution Bars
   const denomContainer = document.getElementById("analytics-denom-list");
+  if (denomContainer) {
+    denomContainer.innerHTML = "";
+    const denoms = data.denomination_distribution || [];
+    if (denoms.length === 0) {
+      denomContainer.innerHTML = `<div style="font-size:13px;color:var(--text-muted);padding:8px">데이터가 없습니다.</div>`;
+    } else {
+      denoms.forEach((d) => {
+        const isActive = analyticsFilter.denomination === d.name;
+        const row = document.createElement("div");
+        row.className = `analytics-bar-item ${isActive ? "active" : ""}`;
+        row.title = `클릭 시 [${d.name}] 필터링`;
+        row.onclick = () => setAnalyticsFilter("denomination", d.name);
+        row.innerHTML = `
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+            <span style="font-weight:${isActive ? "700" : "500"};color:${isActive ? "var(--primary)" : "inherit"}">
+              ${escapeHtml(d.name)}
+            </span>
+            <strong style="font-size:12px">${d.count}개 (${d.ratio}%)</strong>
+          </div>
+          <div style="background:#e2e8f0;height:8px;border-radius:4px;overflow:hidden">
+            <div style="background:var(--primary);width:${d.ratio}%;height:100%"></div>
+          </div>
+        `;
+        denomContainer.appendChild(row);
+      });
+    }
+  }
+
+  // 4. Scale Distribution Bars
   const scaleContainer = document.getElementById("analytics-scale-list");
-  if (!denomContainer || !scaleContainer) return;
+  if (scaleContainer) {
+    scaleContainer.innerHTML = "";
+    const scales = data.scale_distribution || [];
+    if (scales.length === 0) {
+      scaleContainer.innerHTML = `<div style="font-size:13px;color:var(--text-muted);padding:8px">데이터가 없습니다.</div>`;
+    } else {
+      scales.forEach((t) => {
+        const isActive = analyticsFilter.scale === t.scale;
+        const color = SCALE_COLORS[t.scale] || "var(--success)";
+        const row = document.createElement("div");
+        row.className = `analytics-bar-item ${isActive ? "active" : ""}`;
+        row.title = `클릭 시 [${t.scale}] 필터링`;
+        row.onclick = () => setAnalyticsFilter("scale", t.scale);
+        row.innerHTML = `
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+            <span style="font-weight:${isActive ? "700" : "500"};color:${isActive ? "var(--primary)" : "inherit"}">
+              ${escapeHtml(t.scale)}
+            </span>
+            <strong style="font-size:12px">${t.count}개 (${t.ratio}%)</strong>
+          </div>
+          <div style="background:#e2e8f0;height:8px;border-radius:4px;overflow:hidden">
+            <div style="background:${color};width:${t.ratio}%;height:100%"></div>
+          </div>
+        `;
+        scaleContainer.appendChild(row);
+      });
+    }
+  }
 
-  denomContainer.innerHTML = "";
-  scaleContainer.innerHTML = "";
+  // 5. Cross-tabulation Matrix Table
+  const crosstabTable = document.getElementById("analytics-crosstab-table");
+  if (crosstabTable && data.crosstab) {
+    renderCrosstabTable(crosstabTable, data.crosstab);
+  }
 
-  // Denominations
-  const denoms = [
-    { name: "예장합동", count: 1, ratio: 50.0 },
-    { name: "예장통합", count: 1, ratio: 50.0 },
+  // 6. Active Filter Chips
+  renderActiveFilterChips();
+
+  // 7. Drill-down Detail Table
+  renderDrilldownTable(data.churches || [], data.drilldown_count || 0);
+}
+
+function updateRegionSelectOptions(regionalBreakdown) {
+  const select = document.getElementById("analytics-region-select");
+  if (!select) return;
+
+  const currentVal = analyticsFilter.region;
+  // Keep track of existing values to avoid unnecessary re-creation
+  const regions = ["전체"];
+  if (regionalBreakdown && regionalBreakdown.length > 0) {
+    regionalBreakdown.forEach((r) => {
+      if (r.region && !regions.includes(r.region)) {
+        regions.push(r.region);
+      }
+    });
+  }
+
+  select.innerHTML = "";
+  regions.forEach((reg) => {
+    const opt = document.createElement("option");
+    opt.value = reg;
+    opt.innerText = reg === "전체" ? "전체 지역" : reg;
+    if (reg === currentVal) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+function renderCrosstabTable(table, crosstab) {
+  const columns = crosstab.columns || SCALE_CATEGORIES_LIST;
+  const rows = crosstab.rows || [];
+  const colTotals = crosstab.column_totals || {};
+  const grandTotal = crosstab.grand_total || 0;
+
+  let html = `<thead><tr><th style="min-width:120px">교단 \\ 규모</th>`;
+  columns.forEach((col) => {
+    const isColActive = analyticsFilter.scale === col;
+    html += `
+      <th class="crosstab-header-clickable ${isColActive ? "active" : ""}"
+          onclick="setAnalyticsFilter('scale', '${escapeHtml(col)}')"
+          title="클릭 시 [${escapeHtml(col)}] 규모 필터링">
+        ${escapeHtml(col)}
+      </th>`;
+  });
+  html += `<th style="min-width:70px">교단 합계</th></tr></thead><tbody>`;
+
+  if (rows.length === 0) {
+    html += `<tr><td colspan="${columns.length + 2}" style="color:var(--text-muted);padding:24px">집계 데이터가 없습니다.</td></tr>`;
+  } else {
+    rows.forEach((row) => {
+      const isRowActive = analyticsFilter.denomination === row.denomination;
+      html += `<tr>`;
+      html += `
+        <td class="crosstab-row-title ${isRowActive ? "active" : ""}"
+            onclick="setAnalyticsFilter('denomination', '${escapeHtml(row.denomination)}')"
+            title="클릭 시 [${escapeHtml(row.denomination)}] 교단 필터링">
+          ${escapeHtml(row.denomination)}
+        </td>`;
+
+      columns.forEach((col) => {
+        const count = (row.scales && row.scales[col]) || 0;
+        const isCellActive =
+          analyticsFilter.denomination === row.denomination &&
+          analyticsFilter.scale === col;
+        const isEmpty = count === 0;
+
+        html += `
+          <td class="crosstab-cell ${isEmpty ? "empty" : ""} ${isCellActive ? "active" : ""}"
+              ${!isEmpty ? `onclick="setAnalyticsCellFilter('${escapeHtml(row.denomination)}', '${escapeHtml(col)}')"` : ""}
+              title="${!isEmpty ? `클릭 시 [${escapeHtml(row.denomination)} × ${escapeHtml(col)}] (${count}건) 드릴다운` : ""}">
+            ${count > 0 ? count : "-"}
+          </td>`;
+      });
+
+      html += `
+        <td class="crosstab-total-col ${isRowActive ? "active" : ""}"
+            onclick="setAnalyticsFilter('denomination', '${escapeHtml(row.denomination)}')"
+            title="클릭 시 [${escapeHtml(row.denomination)}] 교단 전체 필터링">
+          ${row.total}
+        </td>`;
+      html += `</tr>`;
+    });
+  }
+
+  html += `</tbody><tfoot><tr class="crosstab-total-row"><td>규모별 합계</td>`;
+  columns.forEach((col) => {
+    const isColActive = analyticsFilter.scale === col;
+    const total = colTotals[col] || 0;
+    html += `
+      <td class="crosstab-total-col ${isColActive ? "active" : ""}"
+          onclick="setAnalyticsFilter('scale', '${escapeHtml(col)}')"
+          title="클릭 시 [${escapeHtml(col)}] 규모 전체 필터링">
+        ${total}
+      </td>`;
+  });
+  html += `<td>${grandTotal}</td></tr></tfoot>`;
+
+  table.innerHTML = html;
+}
+
+function renderActiveFilterChips() {
+  const container = document.getElementById("analytics-active-filter-chips");
+  if (!container) return;
+
+  container.innerHTML = "";
+  const filters = [
+    { key: "region", label: "지역", val: analyticsFilter.region },
+    { key: "denomination", label: "교단", val: analyticsFilter.denomination },
+    { key: "scale", label: "규모", val: analyticsFilter.scale },
   ];
-  denoms.forEach((d) => {
-    const row = document.createElement("div");
-    row.style.marginBottom = "10px";
-    row.innerHTML = `
-      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
-        <span>${d.name}</span>
-        <strong>${d.count}개 (${d.ratio}%)</strong>
-      </div>
-      <div style="background:#e2e8f0;height:8px;border-radius:4px;overflow:hidden">
-        <div style="background:var(--primary);width:${d.ratio}%;height:100%"></div>
-      </div>
+
+  filters.forEach((f) => {
+    if (f.val && f.val !== "전체") {
+      const chip = document.createElement("span");
+      chip.className = "filter-chip";
+      chip.innerHTML = `
+        <span>${f.label}: <strong>${escapeHtml(f.val)}</strong></span>
+        <span class="chip-remove" title="필터 해제">&times;</span>
+      `;
+      chip.querySelector(".chip-remove").onclick = (e) => {
+        e.stopPropagation();
+        analyticsFilter[f.key] = "전체";
+        if (f.key === "region") {
+          const regionSelect = document.getElementById("analytics-region-select");
+          if (regionSelect) regionSelect.value = "전체";
+        }
+        renderAnalytics();
+      };
+      container.appendChild(chip);
+    }
+  });
+}
+
+function renderDrilldownTable(churches, count) {
+  const badge = document.getElementById("analytics-drilldown-badge");
+  if (badge) badge.innerText = `${count}건 조회됨`;
+
+  const tbody = document.getElementById("analytics-drilldown-tbody");
+  if (!tbody) return;
+
+  if (churches.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="10" style="text-align:center;color:var(--text-muted);padding:30px">
+          선택된 조건에 해당하는 교회가 없습니다.
+        </td>
+      </tr>
     `;
-    denomContainer.appendChild(row);
+    return;
+  }
+
+  tbody.innerHTML = "";
+  churches.forEach((c, idx) => {
+    const scale = classifyScaleFrontend(c.congregation_size);
+    const scaleColor = SCALE_COLORS[scale] || "var(--text-muted)";
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td style="color:var(--text-muted);font-size:12px">${idx + 1}</td>
+      <td style="font-weight:600">${escapeHtml(c.church_name || "")}</td>
+      <td>${escapeHtml(c.pastor || "")}</td>
+      <td><span class="badge" style="background:#f1f5f9;color:var(--text-main)">${escapeHtml(c.denomination || "미지정")}</span></td>
+      <td>${escapeHtml(c.region || "-")}</td>
+      <td style="font-weight:600">${c.congregation_size ? c.congregation_size.toLocaleString() + "명" : '<span style="color:var(--text-muted)">미입력</span>'}</td>
+      <td>
+        <span class="badge" style="background:${scaleColor}18;color:${scaleColor};font-weight:600">
+          ${escapeHtml(scale)}
+        </span>
+      </td>
+      <td>
+        <span class="badge ${c.tier === "A" ? "badge-verified" : "badge-manual"}">
+          ${escapeHtml(c.tier || "-")}
+        </span>
+      </td>
+      <td style="font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(c.road_address || c.address || "")}">
+        ${escapeHtml(c.road_address || c.address || "-")}
+      </td>
+      <td style="text-align:center">
+        <button class="btn btn-secondary btn-sm" onclick="copyDrilldownRecordText(${c.row_id})">
+          📋 복사
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function copyDrilldownRecordText(rowId) {
+  const target = masterRecords.find((r) => r.row_id === rowId);
+  if (!target) {
+    showToast("교회 정보를 찾을 수 없습니다.");
+    return;
+  }
+  const text = `${target.church_name} (${target.pastor} 목사) / ${target.road_address || target.address || "주소 미등록"}`;
+  navigator.clipboard.writeText(text).then(
+    () => showToast(`클립보드 복사 완료: ${target.church_name}`),
+    () => showToast("클립보드 복사에 실패했습니다.")
+  );
+}
+
+function calculateMockAnalytics(records, filter) {
+  const region = filter.region;
+  const denom = filter.denomination;
+  const scale = filter.scale;
+
+  // 1. Regional records
+  let regional = records;
+  if (region && region !== "전체") {
+    regional = records.filter((r) => r.region === region);
+  }
+
+  // 2. Summary
+  const knownSizes = regional
+    .map((r) => r.congregation_size)
+    .filter((s) => s && s > 0);
+  const totalMembers = knownSizes.reduce((acc, v) => acc + v, 0);
+  const avgMembers = knownSizes.length ? Math.round(totalMembers / knownSizes.length) : 0;
+  const maxMembers = knownSizes.length ? Math.max(...knownSizes) : 0;
+  const minMembers = knownSizes.length ? Math.min(...knownSizes) : 0;
+
+  const summary = {
+    total_churches: regional.length,
+    total_members: totalMembers,
+    avg_members: avgMembers,
+    max_members: maxMembers,
+    min_members: minMembers,
+    entered_count: knownSizes.length,
+    missing_count: regional.length - knownSizes.length,
+    entered_ratio: regional.length
+      ? Math.round((knownSizes.length / regional.length) * 1000) / 10
+      : 0,
+  };
+
+  // 3. Regional breakdown
+  const regMap = {};
+  records.forEach((r) => {
+    const reg = r.region || "미지정";
+    regMap[reg] = (regMap[reg] || 0) + 1;
+  });
+  const regionalBreakdown = Object.keys(regMap).map((k) => ({
+    region: k,
+    church_count: regMap[k],
+    ratio: Math.round((regMap[k] / records.length) * 1000) / 10,
+  }));
+
+  // 4. Denominations
+  const denomMap = {};
+  regional.forEach((r) => {
+    const d = r.denomination || "미지정";
+    denomMap[d] = (denomMap[d] || 0) + 1;
+  });
+  const denominationDistribution = Object.keys(denomMap).map((k) => ({
+    name: k,
+    count: denomMap[k],
+    ratio: regional.length ? Math.round((denomMap[k] / regional.length) * 1000) / 10 : 0,
+  }));
+
+  // 5. Scales
+  const scaleMap = {};
+  SCALE_CATEGORIES_LIST.forEach((s) => (scaleMap[s] = 0));
+  regional.forEach((r) => {
+    const s = classifyScaleFrontend(r.congregation_size);
+    scaleMap[s] = (scaleMap[s] || 0) + 1;
+  });
+  const scaleDistribution = SCALE_CATEGORIES_LIST.map((s) => ({
+    scale: s,
+    count: scaleMap[s],
+    ratio: regional.length ? Math.round((scaleMap[s] / regional.length) * 1000) / 10 : 0,
+  }));
+
+  // 6. Crosstab
+  const allDenoms = Array.from(new Set(regional.map((r) => r.denomination || "미지정")));
+  const matrix = {};
+  const colTotals = {};
+  SCALE_CATEGORIES_LIST.forEach((s) => (colTotals[s] = 0));
+  allDenoms.forEach((d) => {
+    matrix[d] = {};
+    SCALE_CATEGORIES_LIST.forEach((s) => (matrix[d][s] = 0));
   });
 
-  // 5 Tiers
-  const tiers = [
-    { scale: "소형 (~100)", count: 0, ratio: 0 },
-    { scale: "중형 (100~500)", count: 0, ratio: 0 },
-    { scale: "중대형 (500~1000)", count: 1, ratio: 50.0 },
-    { scale: "대형 (1000~3000)", count: 0, ratio: 0 },
-    { scale: "초대형 (3000~)", count: 1, ratio: 50.0 },
-  ];
-  tiers.forEach((t) => {
-    const row = document.createElement("div");
-    row.style.marginBottom = "10px";
-    row.innerHTML = `
-      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
-        <span>${t.scale}</span>
-        <strong>${t.count}개 (${t.ratio}%)</strong>
-      </div>
-      <div style="background:#e2e8f0;height:8px;border-radius:4px;overflow:hidden">
-        <div style="background:var(--success);width:${t.ratio}%;height:100%"></div>
-      </div>
-    `;
-    scaleContainer.appendChild(row);
+  regional.forEach((r) => {
+    const d = r.denomination || "미지정";
+    const s = classifyScaleFrontend(r.congregation_size);
+    matrix[d][s] = (matrix[d][s] || 0) + 1;
+    colTotals[s] = (colTotals[s] || 0) + 1;
   });
+
+  const rows = allDenoms.map((d) => {
+    const total = SCALE_CATEGORIES_LIST.reduce((sum, s) => sum + matrix[d][s], 0);
+    return { denomination: d, scales: matrix[d], total: total };
+  });
+
+  const crosstab = {
+    columns: SCALE_CATEGORIES_LIST,
+    rows: rows,
+    column_totals: colTotals,
+    grand_total: regional.length,
+  };
+
+  // 7. Drilldown churches
+  let churches = records;
+  if (region && region !== "전체") {
+    churches = churches.filter((r) => r.region === region);
+  }
+  if (denom && denom !== "전체") {
+    churches = churches.filter((r) => (r.denomination || "미지정") === denom);
+  }
+  if (scale && scale !== "전체") {
+    churches = churches.filter((r) => classifyScaleFrontend(r.congregation_size) === scale);
+  }
+
+  return {
+    summary: summary,
+    regional_breakdown: regionalBreakdown,
+    denomination_distribution: denominationDistribution,
+    scale_distribution: scaleDistribution,
+    crosstab: crosstab,
+    churches: churches,
+    drilldown_count: churches.length,
+    applied_filters: { region, denomination: denom, scale },
+  };
 }
 
 // --- Toast Helper ---

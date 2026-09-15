@@ -7,6 +7,7 @@ Follows SOLID and YAGNI principles. All methods return a standard dict:
 from typing import Any, Dict, List, Optional, Tuple
 import os
 
+from src.core.analytics import AnalyticsEngine
 from src.core.dispatch import DispatchManager
 from src.core.excel_engine import ExcelEngine, ExcelFileLockedError
 from src.core.grounder import AddressGrounder
@@ -36,6 +37,7 @@ class ChurchBridge:
         self.dispatch_manager = DispatchManager()
         self.address_grounder = AddressGrounder()
         self.homepage_grounder = HomepageGrounder()
+        self.analytics_engine = AnalyticsEngine()
         self.loaded_file_path: Optional[str] = None
         self._load_default_demo_data()
 
@@ -465,55 +467,20 @@ class ChurchBridge:
 
     # --- Analytics (Master Mode) ---
 
-    def get_analytics(self, region_filter: Optional[str] = None) -> Dict[str, Any]:
-        """교세·교단·5단계 규모 통계 집계."""
-        records = [
-            r for r in self.master_records
-            if not region_filter or region_filter == "전체" or r.region == region_filter
-        ]
-
-        total_churches = len(records)
-        sizes = [r.congregation_size for r in records if r.congregation_size is not None]
-        total_members = sum(sizes) if sizes else 0
-        avg_members = int(total_members / len(sizes)) if sizes else 0
-
-        # 교단 분포
-        denom_counts: Dict[str, int] = {}
-        for r in records:
-            d = r.denomination or "미지정"
-            denom_counts[d] = denom_counts.get(d, 0) + 1
-
-        denom_dist = [
-            {"name": k, "count": v, "ratio": round(v / total_churches * 100, 1) if total_churches else 0}
-            for k, v in denom_counts.items()
-        ]
-
-        # 5단계 규모 분포
-        scale_counts = {"소형 (~100)": 0, "중형 (100~500)": 0, "중대형 (500~1000)": 0, "대형 (1000~3000)": 0, "초대형 (3000~)": 0, "미입력": 0}
-        for r in records:
-            category = classify_church_scale(r.congregation_size)
-            scale_counts[category] = scale_counts.get(category, 0) + 1
-
-        scale_dist = [
-            {"scale": k, "count": v, "ratio": round(v / total_churches * 100, 1) if total_churches else 0}
-            for k, v in scale_counts.items()
-            if v > 0
-        ]
-
-        return {
-            "success": True,
-            "data": {
-                "summary": {
-                    "total_churches": total_churches,
-                    "total_members": total_members,
-                    "avg_members": avg_members,
-                },
-                "denomination_distribution": denom_dist,
-                "scale_distribution": scale_dist,
-                "churches": [r.to_dict() for r in records],
-            },
-            "error": None,
-        }
+    def get_analytics(
+        self,
+        region_filter: Optional[str] = None,
+        denomination_filter: Optional[str] = None,
+        scale_filter: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """교세·교단·5단계 규모 통계 집계 및 드릴다운 조회."""
+        analytics_data = self.analytics_engine.calculate_analytics(
+            records=self.master_records,
+            region_filter=region_filter,
+            denomination_filter=denomination_filter,
+            scale_filter=scale_filter,
+        )
+        return {"success": True, "data": analytics_data, "error": None}
 
     # --- Helper ---
 
