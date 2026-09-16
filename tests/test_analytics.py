@@ -1,4 +1,4 @@
-﻿"""Comprehensive Unit Tests for AnalyticsEngine and Bridge Integration."""
+"""Comprehensive Unit Tests for AnalyticsEngine and Bridge Integration."""
 
 import pytest
 from src.bridge import ChurchBridge
@@ -190,10 +190,8 @@ def test_analytics_empty_records():
     assert len(res["crosstab"]["rows"]) == 0
 
 
-def test_bridge_analytics_integration():
-    bridge = ChurchBridge()
-    # Initial demo data contains 4 records
-    res = bridge.get_analytics()
+def test_bridge_analytics_integration(populated_bridge):
+    res = populated_bridge.get_analytics()
     assert res["success"] is True
     data = res["data"]
 
@@ -203,6 +201,6 @@ def test_bridge_analytics_integration():
     assert len(data["crosstab"]["rows"]) > 0
 
     # Test drilldown via bridge
-    res_gwangju = bridge.get_analytics(region_filter="광주")
+    res_gwangju = populated_bridge.get_analytics(region_filter="광주")
     assert res_gwangju["success"] is True
     assert res_gwangju["data"]["summary"]["total_churches"] == 2

@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import os
 
 from src.core.analytics import AnalyticsEngine
+from src.core.church114_engine import Church114Engine
 from src.core.dispatch import DispatchManager
 from src.core.excel_engine import ExcelEngine, ExcelFileLockedError
 from src.core.grounder import AddressGrounder
@@ -40,135 +41,9 @@ class ChurchBridge:
         self.homepage_grounder = HomepageGrounder()
         self.analytics_engine = AnalyticsEngine()
         self.obsidian_bridge = ObsidianBridge()
+        self.church114_engine = Church114Engine()
         self.obsidian_vault_path: str = r"C:\Users\20260602\Documents\github\Obsidian"
         self.loaded_file_path: Optional[str] = None
-        self._load_default_demo_data()
-
-    def _load_default_demo_data(self) -> None:
-        """초기 화면 렌더링 및 테스트를 위한 샘플 데이터 구성."""
-        self.master_records = [
-            ChurchRecord(
-                row_id=1,
-                region="광주",
-                classification="이사교회",
-                church_name="광주겨자씨교회",
-                pastor="나학수",
-                address="광주광역시 남구 봉선로 12",
-                denomination="예장합동",
-                congregation_size=3500,
-                tier="A",
-                temperature="Hot",
-                management_type="본부집중",
-                primary_campaign="희망친구 결연",
-                primary_campaign_date="2026-03-15",
-                campaign_status="제안완료",
-                followup_campaign="국내위기가정지원",
-                next_action="추진위원회 방문 미팅",
-                next_contact_date="2026-09-25",
-                remarks="담임목사님 창립기념 선물 발송 완료",
-                zip_code="61642",
-                homepage="http://www.mustardseed.or.kr",
-                verification_status="승인완료",
-                homepage_status="확인완료",
-            ),
-            ChurchRecord(
-                row_id=2,
-                region="광주",
-                classification="타겟교회",
-                church_name="광주동성교회",
-                pastor="안성주",
-                address="",  # 주소 누락 샘플
-                denomination="예장통합",
-                congregation_size=800,
-                tier="B",
-                temperature="Warm",
-                management_type="지역본부",
-                primary_campaign="긴급구호",
-                primary_campaign_date="2026-05-10",
-                campaign_status="검토중",
-                followup_campaign="우물파기",
-                next_action="자료 이메일 발송",
-                next_contact_date="2026-09-20",
-                remarks="주소 확인 후 공문 발송 요청",
-                zip_code="",
-                homepage="",
-                verification_status="미검증",
-                homepage_status="미검증",
-            ),
-            ChurchRecord(
-                row_id=3,
-                region="서울",
-                classification="후원교회",
-                church_name="영락교회",
-                pastor="김운성",
-                address="서울특별시 중구 수표로 33",
-                denomination="예장통합",
-                congregation_size=12000,
-                tier="A",
-                temperature="Hot",
-                management_type="본부집중",
-                primary_campaign="식수지원",
-                primary_campaign_date="2026-01-20",
-                campaign_status="확정",
-                followup_campaign="보건의료",
-                next_action="분기 결과보고서 전달",
-                next_contact_date="2026-10-01",
-                remarks="대표 전화 및 부속기관 연계",
-                zip_code="04551",
-                homepage="https://www.youngnak.net",
-                verification_status="승인완료",
-                homepage_status="확인완료",
-            ),
-            ChurchRecord(
-                row_id=4,
-                region="경기",
-                classification="타겟교회",
-                church_name="하남샘물교회",
-                pastor="이철희",
-                address="",  # 주소 불확실 샘플
-                denomination="백석",
-                congregation_size=250,
-                tier="C",
-                temperature="Cold",
-                management_type="일반",
-                primary_campaign="아동결연",
-                primary_campaign_date="2026-07-01",
-                campaign_status="보류",
-                followup_campaign="",
-                next_action="차기 컨택",
-                next_contact_date="2026-11-10",
-                remarks="동명 교회 확인 필요",
-                zip_code="",
-                homepage="",
-                verification_status="미검증",
-                homepage_status="미검증",
-            ),
-        ]
-
-        self.simple_records = [
-            SimpleAddressRecord(
-                row_id=1,
-                church_name="광주겨자씨교회",
-                pastor="나학수",
-                region="광주",
-                road_address="광주광역시 남구 봉선로 12",
-                zip_code="61642",
-                homepage="http://www.mustardseed.or.kr",
-                address_status="확인완료",
-                homepage_status="확인완료",
-            ),
-            SimpleAddressRecord(
-                row_id=2,
-                church_name="광주동성교회",
-                pastor="안성주",
-                region="광주",
-                road_address="",
-                zip_code="",
-                homepage="",
-                address_status="미검증",
-                homepage_status="미검증",
-            ),
-        ]
 
     # --- Mode & Data Retrieval ---
 
@@ -583,6 +458,67 @@ class ChurchBridge:
             "data": {"record": new_record.to_dict(), "total_master_count": len(self.master_records)},
             "error": None,
         }
+
+    # --- Phase 4.5: Church114 Orthodox Engine & Map Hierarchy IPC API ---
+
+    def get_church114_analytics(
+        self,
+        sido: Optional[str] = None,
+        sigungu: Optional[str] = None,
+        eupmyeondong: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """교회114 정통교단 계층형 교세 분석 및 밀도 단계구분도 데이터 산출."""
+        try:
+            data = self.church114_engine.get_hierarchy_analytics(sido, sigungu, eupmyeondong)
+            return {"success": True, "data": data, "error": None}
+        except Exception as e:
+            return {"success": False, "data": None, "error": str(e)}
+
+    def get_church114_top10(
+        self,
+        sido: Optional[str] = None,
+        sigungu: Optional[str] = None,
+        eupmyeondong: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """해당 지역의 성도 수 상위 TOP 10 랭킹 (모든 핵심 지표 포함)."""
+        try:
+            top10 = self.church114_engine.get_top10_churches(sido, sigungu, eupmyeondong)
+            return {"success": True, "data": top10, "error": None}
+        except Exception as e:
+            return {"success": False, "data": [], "error": str(e)}
+
+    def get_church114_grid(
+        self,
+        sido: Optional[str] = None,
+        sigungu: Optional[str] = None,
+        eupmyeondong: Optional[str] = None,
+        denomination: Optional[str] = None,
+        scale: Optional[str] = None,
+        keyword: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """지역 상세 페이지용 전체 교회 목록 그리드 데이터 반환."""
+        try:
+            churches = self.church114_engine.get_church_grid_list(
+                sido, sigungu, eupmyeondong, denomination, scale, keyword
+            )
+            return {"success": True, "data": churches, "error": None}
+        except Exception as e:
+            return {"success": False, "data": [], "error": str(e)}
+
+    def refresh_church114_from_portal(
+        self,
+        region_query: str,
+        api_provider: str = "KAKAO",
+        api_key: str = "",
+    ) -> Dict[str, Any]:
+        """사용자 API Key를 사용하여 특정 지역 최신 교세 데이터 재조사 & 갱신."""
+        try:
+            res = self.church114_engine.enrich_from_portal_api(
+                region_query, api_provider, api_key
+            )
+            return res
+        except Exception as e:
+            return {"success": False, "count": 0, "error": str(e)}
 
     # --- Helper ---
 

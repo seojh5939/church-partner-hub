@@ -309,8 +309,8 @@ def test_import_obsidian_to_excel(mock_vault: Path):
     assert rec.congregation_size == 500  # '300~500' -> 500
 
 
-def test_bridge_obsidian_integration(mock_vault: Path):
-    bridge = ChurchBridge()
+def test_bridge_obsidian_integration(mock_vault: Path, populated_bridge):
+    bridge = populated_bridge
     bridge.obsidian_vault_path = str(mock_vault)
 
     # 1. 볼트 상태 확인

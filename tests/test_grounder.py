@@ -249,7 +249,7 @@ def test_is_address_matching():
 # --- Bridge Integration & Security Tests ---
 
 @patch("requests.get")
-def test_bridge_address_and_homepage_integration(mock_get):
+def test_bridge_address_and_homepage_integration(mock_get, populated_bridge):
     # Mock responses for web requests
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -264,7 +264,7 @@ def test_bridge_address_and_homepage_integration(mock_get):
     mock_get.return_value = mock_resp
     mock_get.return_value.__enter__.return_value = mock_resp
 
-    bridge = ChurchBridge()
+    bridge = populated_bridge
     # Row 2 initially has empty address and status="미검증"
     hp_res_before = bridge.search_homepage(2, mode="MASTER")
     assert hp_res_before["success"] is True
@@ -301,8 +301,8 @@ def test_ssrf_protection():
     assert not is_safe_external_url("")
 
 
-def test_confirm_homepage_cascading_uncertainty_invariant():
-    bridge = ChurchBridge()
+def test_confirm_homepage_cascading_uncertainty_invariant(populated_bridge):
+    bridge = populated_bridge
     # Row 2 has empty address and is unconfirmed
     res = bridge.confirm_homepage(2, "http://www.gjdongsung.or.kr", mode="MASTER")
     assert res["success"] is False
