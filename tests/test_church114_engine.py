@@ -126,3 +126,47 @@ def test_bridge_church114_ipc():
     res_grid = bridge.get_church114_grid(sido="서울특별시", sigungu="강남구")
     assert res_grid["success"] is True
     assert len(res_grid["data"]) > 0
+
+
+def test_top_denomination_and_key_compatibility(engine):
+    analytics = engine.get_hierarchy_analytics()
+    summary = analytics["summary"]
+    # 1위 교단과 점유율이 summary에 반드시 포함되어야 함
+    assert "top_denomination" in summary
+    assert "top_denomination_ratio" in summary
+    assert summary["top_denomination"] != "-"
+    assert summary["top_denomination_ratio"] > 0
+    # 프론트엔드 키 호환성 검증
+    assert "denominations" in analytics
+    assert "denomination_distribution" in analytics
+    assert analytics["denominations"] == analytics["denomination_distribution"]
+
+
+def test_import_churches_from_csv(engine, tmp_path):
+    # 테스트용 교회 CSV 파일 작성
+    csv_file = tmp_path / "custom_churches.csv"
+    csv_file.write_text(
+        "교회명,교단,담임목사,도로명주소,성도수\n"
+        "테스트성결교회,기독교대한성결교회,김목사,서울특별시 마포구 마포대로 1,500\n"
+        "신천지위장교회,신천지,이만희,서울특별시 영등포구 여의대로 2,1000\n",
+        encoding="utf-8-sig",
+    )
+
+    result = engine.import_churches_from_file(str(csv_file))
+    assert result["success"] is True
+    # 이단인 '신천지위장교회'는 배제되고 '테스트성결교회' 1건만 추가되어야 함
+    assert result["count"] == 1
+
+    # DB에서 확인
+    grid = engine.get_church_grid_list(keyword="테스트성결교회")
+    assert len(grid) == 1
+    assert grid[0]["church_name"] == "테스트성결교회"
+    assert grid[0]["denomination"] == "기독교대한성결교회"
+
+
+def test_fetch_orthodox_churches_from_web(engine):
+    # 웹 수집 엔진 호출 (네트워크 환경에 구애받지 않고 안전하게 처리되는지 확인)
+    res = engine.fetch_orthodox_churches_from_web(region_query="강원특별자치도")
+    assert res["success"] is True
+    assert "count" in res
+    assert res["region"] == "강원특별자치도"

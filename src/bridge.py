@@ -520,6 +520,31 @@ class ChurchBridge:
         except Exception as e:
             return {"success": False, "count": 0, "error": str(e)}
 
+    def fetch_church114_from_web(
+        self, region_query: str = "전국"
+    ) -> Dict[str, Any]:
+        """API Key 없이도 인터넷(교회114 공개 웹/정통교단 목록)에서 교회를 수집하여 적재."""
+        try:
+            return self.church114_engine.fetch_orthodox_churches_from_web(region_query)
+        except Exception as e:
+            return {"success": False, "count": 0, "error": str(e)}
+
+    def import_church114_file(
+        self, file_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """사용자가 보유한 엑셀(.xlsx) 또는 CSV 파일에서 교세 분석 데이터를 임포트."""
+        try:
+            if not file_path:
+                file_types = ("엑셀/CSV 파일 (*.xlsx;*.csv)", "모든 파일 (*.*)")
+                result = self._open_file_dialog(file_types)
+                if not result:
+                    return {"success": False, "count": 0, "error": "파일 선택이 취소되었습니다."}
+                file_path = result
+
+            return self.church114_engine.import_churches_from_file(file_path)
+        except Exception as e:
+            return {"success": False, "count": 0, "error": str(e)}
+
     # --- Helper ---
 
     def _find_record(self, row_id: int, mode: str) -> Any:

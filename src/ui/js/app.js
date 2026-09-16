@@ -934,6 +934,57 @@ function setupChurch114Analytics() {
     });
   }
 
+  // 인터넷 정통교단 불러오기 버튼 (API Key 불필요, 웹 공개 데이터 수집)
+  const btnFetchWeb = document.getElementById("btn-fetch-web-churches");
+  if (btnFetchWeb) {
+    btnFetchWeb.addEventListener("click", async () => {
+      let regionQuery = church114Filter.sido !== "전체" ? church114Filter.sido : "전국";
+      if (church114Filter.sigungu !== "전체") regionQuery += " " + church114Filter.sigungu;
+
+      btnFetchWeb.disabled = true;
+      btnFetchWeb.innerText = "🌐 웹 수집 중...";
+      showToast(`'${regionQuery}' 공인 정통교단 교세 데이터를 인터넷에서 실시간 수집 중입니다...`);
+
+      if (window.pywebview) {
+        const res = await callApi("fetch_church114_from_web", regionQuery);
+        btnFetchWeb.disabled = false;
+        btnFetchWeb.innerText = "🌐 인터넷 정통교단 불러오기";
+        if (res && res.success) {
+          showToast(`인터넷 정통교단 데이터 수집 완료: 총 ${res.count}개 교회가 교세 DB에 반영되었습니다.`);
+          await loadChurch114Analytics(church114Filter.sido, church114Filter.sigungu, church114Filter.emd);
+        } else {
+          showToast(`수집 실패: ${res ? res.error : "알 수 없는 오류"}`);
+        }
+      } else {
+        setTimeout(async () => {
+          btnFetchWeb.disabled = false;
+          btnFetchWeb.innerText = "🌐 인터넷 정통교단 불러오기";
+          showToast(`'${regionQuery}' 정통교단 인터넷 데이터 40건 수집 완료 (미리보기 모드)`);
+          await loadChurch114Analytics(church114Filter.sido, church114Filter.sigungu, church114Filter.emd);
+        }, 800);
+      }
+    });
+  }
+
+  // 교세 파일 직접 가져오기 버튼 (엑셀/CSV 직접 임포트)
+  const btnImportFile = document.getElementById("btn-import-church-file");
+  if (btnImportFile) {
+    btnImportFile.addEventListener("click", async () => {
+      if (window.pywebview) {
+        showToast("가져올 교세 엑셀(.xlsx) 또는 CSV 파일을 선택해주세요.");
+        const res = await callApi("import_church114_file");
+        if (res && res.success) {
+          showToast(`교세 파일 가져오기 성공: 총 ${res.count}개 교회가 DB에 반영되었습니다.`);
+          await loadChurch114Analytics(church114Filter.sido, church114Filter.sigungu, church114Filter.emd);
+        } else if (res && res.error && !res.error.includes("취소")) {
+          showToast(`가져오기 실패: ${res.error}`);
+        }
+      } else {
+        showToast("미리보기 모드: 데스크톱 실행 환경에서 엑셀 파일 선택창이 열립니다.");
+      }
+    });
+  }
+
   // 최신 교세 재조사 버튼 (카카오/네이버 API Key 활용)
   const btnRefresh = document.getElementById("btn-refresh-portal-churches");
   if (btnRefresh) {
@@ -1224,8 +1275,19 @@ function renderOrthodoxMap(subRegions, scope, analyticsData) {
   const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
 
   if (scope === "SIDO") {
-    // 전국 17개 시도 타일 벡터 맵
-    svg.setAttribute("viewBox", "0 0 500 620");
+    // 대한민국 17개 시도 실제 지형 벡터 맵 (SVG Path 기반 행정구역도)
+    svg.setAttribute("viewBox", "0 0 540 680");
+
+    const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    defs.innerHTML = `
+      <filter id="map-region-shadow" x="-8%" y="-8%" width="120%" height="120%">
+        <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.15" flood-color="#0f172a"/>
+      </filter>
+      <filter id="map-hover-shadow" x="-12%" y="-12%" width="130%" height="130%">
+        <feDropShadow dx="0" dy="4" stdDeviation="5" flood-opacity="0.3" flood-color="#0f172a"/>
+      </filter>
+    `;
+    svg.appendChild(defs);
 
     if (typeof KOREA_SIDO_LIST !== "undefined") {
       KOREA_SIDO_LIST.forEach((item) => {
@@ -1236,52 +1298,67 @@ function renderOrthodoxMap(subRegions, scope, analyticsData) {
         tileGroup.style.cursor = "pointer";
         tileGroup.style.transition = "transform 0.15s ease";
 
-        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        rect.setAttribute("x", item.cx - item.w / 2);
-        rect.setAttribute("y", item.cy - item.h / 2);
-        rect.setAttribute("width", item.w);
-        rect.setAttribute("height", item.h);
-        rect.setAttribute("rx", "10");
-        rect.setAttribute("ry", "10");
-        rect.setAttribute("fill", fillColor);
-        rect.setAttribute("stroke", "#ffffff");
-        rect.setAttribute("stroke-width", "2");
-        rect.setAttribute("opacity", "0.92");
+        // 실제 대한민국 시도 지형 외곽선 SVG Path
+        const pathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        pathEl.setAttribute("d", item.path);
+        pathEl.setAttribute("fill", fillColor);
+        pathEl.setAttribute("stroke", "#ffffff");
+        pathEl.setAttribute("stroke-width", "1.8");
+        pathEl.setAttribute("stroke-linejoin", "round");
+        pathEl.setAttribute("stroke-linecap", "round");
+        pathEl.setAttribute("filter", "url(#map-region-shadow)");
+        pathEl.setAttribute("opacity", "0.95");
 
-        // 텍스트 (시도 이름)
+        // 중심 라벨 좌표
+        const lx = item.labelX || 200;
+        const ly = item.labelY || 200;
+
+        // 텍스트 (시도 이름 - 후광 효과 적용)
         const textName = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        textName.setAttribute("x", item.cx);
-        textName.setAttribute("y", item.cy - 4);
+        textName.setAttribute("x", lx);
+        textName.setAttribute("y", ly - 2);
         textName.setAttribute("text-anchor", "middle");
         textName.setAttribute("fill", "#ffffff");
-        textName.setAttribute("font-size", "13");
+        textName.setAttribute("stroke", "rgba(15,23,42,0.8)");
+        textName.setAttribute("stroke-width", "2.5");
+        textName.style.paintOrder = "stroke fill";
+        textName.setAttribute("font-size", "12");
         textName.setAttribute("font-weight", "700");
         textName.setAttribute("pointer-events", "none");
         textName.textContent = item.short;
 
         // 텍스트 (교회 수)
         const textCount = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        textCount.setAttribute("x", item.cx);
-        textCount.setAttribute("y", item.cy + 14);
+        textCount.setAttribute("x", lx);
+        textCount.setAttribute("y", ly + 12);
         textCount.setAttribute("text-anchor", "middle");
-        textCount.setAttribute("fill", "rgba(255,255,255,0.9)");
-        textCount.setAttribute("font-size", "11");
+        textCount.setAttribute("fill", "#ffffff");
+        textCount.setAttribute("stroke", "rgba(15,23,42,0.8)");
+        textCount.setAttribute("stroke-width", "2.5");
+        textCount.style.paintOrder = "stroke fill";
+        textCount.setAttribute("font-size", "10");
         textCount.setAttribute("font-weight", "600");
         textCount.setAttribute("pointer-events", "none");
         textCount.textContent = `${info.church_count || 0}개`;
 
-        // 상호작용
+        // 상호작용 (호버 하이라이트 & 툴팁)
         tileGroup.addEventListener("mouseenter", (e) => {
-          rect.setAttribute("opacity", "1");
-          rect.setAttribute("stroke-width", "3");
+          pathEl.setAttribute("stroke", "#0f172a");
+          pathEl.setAttribute("stroke-width", "2.8");
+          pathEl.setAttribute("filter", "url(#map-hover-shadow)");
+          pathEl.setAttribute("opacity", "1");
+          // 마우스 올린 구역을 맨 위로 올려 테두리 겹침 방지
+          if (tileGroup.parentNode) tileGroup.parentNode.appendChild(tileGroup);
           showTooltip(e, info);
         });
         tileGroup.addEventListener("mousemove", (e) => {
           showTooltip(e, info);
         });
         tileGroup.addEventListener("mouseleave", () => {
-          rect.setAttribute("opacity", "0.92");
-          rect.setAttribute("stroke-width", "2");
+          pathEl.setAttribute("stroke", "#ffffff");
+          pathEl.setAttribute("stroke-width", "1.8");
+          pathEl.setAttribute("filter", "url(#map-region-shadow)");
+          pathEl.setAttribute("opacity", "0.95");
           hideTooltip();
         });
         tileGroup.addEventListener("click", () => {
@@ -1296,7 +1373,7 @@ function renderOrthodoxMap(subRegions, scope, analyticsData) {
           loadChurch114Analytics(item.name, "전체", "전체");
         });
 
-        tileGroup.appendChild(rect);
+        tileGroup.appendChild(pathEl);
         tileGroup.appendChild(textName);
         tileGroup.appendChild(textCount);
         g.appendChild(tileGroup);

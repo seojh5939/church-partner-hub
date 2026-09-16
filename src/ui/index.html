@@ -157,8 +157,15 @@
             <select id="analytics-emd-select" aria-label="읍면동 선택" style="padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;background:var(--bg-card)">
               <option value="전체">읍면동 전체</option>
             </select>
-            <button class="btn btn-primary btn-sm" id="btn-refresh-portal-churches" title="환경설정에 저장된 API Key로 해당 지역의 최신 교세를 재조사합니다">
-              🔄 최신 교세 재조사
+            <button class="btn btn-primary btn-sm" id="btn-fetch-web-churches" title="API Key 없이도 인터넷(교회114 웹/정통교단 공개 데이터)에서 실시간으로 정통교단 데이터를 수집하여 분석 DB를 채웁니다">
+              🌐 인터넷 정통교단 불러오기
+            </button>
+            <button class="btn btn-secondary btn-sm" id="btn-import-church-file" title="보유하신 교회 엑셀(.xlsx) 또는 CSV 파일을 교세 분석 DB로 직접 가져옵니다">
+              📂 교세 파일 가져오기
+            </button>
+            <input type="file" id="church114-file-input" accept=".xlsx,.xls,.csv" style="display:none">
+            <button class="btn btn-secondary btn-sm" id="btn-refresh-portal-churches" title="환경설정에 등록된 카카오/네이버 API Key로 해당 지역의 최신 교세를 재조사합니다">
+              🔑 API 포털 재조사
             </button>
             <button class="btn btn-secondary btn-sm" id="btn-reset-analytics-filter">
               초기화
@@ -170,7 +177,7 @@
         <div style="margin-top:16px;position:relative">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <div style="font-size:14px;font-weight:700" id="map-current-view-title">
-              📍 전국 17개 광역시도 교회 밀집도 (클릭 시 해당 시도로 줌인)
+              📍 대한민국 17개 광역시도 정통교단 교세 밀집도 (클릭 시 해당 시도로 줌인)
             </div>
             <!-- 범례 (Legend) -->
             <div style="display:flex;align-items:center;gap:12px;font-size:12px;color:var(--text-muted)">
@@ -183,8 +190,8 @@
           </div>
 
           <!-- 벡터 지도 캔버스 컨테이너 -->
-          <div id="orthodox-density-map-container" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;height:380px;position:relative;overflow:hidden">
-            <svg id="orthodox-map-svg" width="100%" height="100%" viewBox="0 0 500 600" style="display:block;margin:auto"></svg>
+          <div id="orthodox-density-map-container" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;height:460px;position:relative;overflow:hidden">
+            <svg id="orthodox-map-svg" width="100%" height="100%" viewBox="0 0 540 680" style="display:block;margin:auto"></svg>
             <div id="map-hover-tooltip" style="position:absolute;display:none;pointer-events:none;background:rgba(15,23,42,0.92);color:white;padding:8px 12px;border-radius:6px;font-size:12px;line-height:1.5;z-index:10;box-shadow:0 4px 6px rgba(0,0,0,0.15)"></div>
           </div>
         </div>
