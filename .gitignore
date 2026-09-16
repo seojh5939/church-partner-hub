@@ -65,6 +65,7 @@ temp/
 tmp/
 logs/
 *.log
+*.db
 
 # oh-my-agent runtime (local artifacts — do not commit)
 .agents/oma-config.local.cue

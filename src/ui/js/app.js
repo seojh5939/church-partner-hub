@@ -8,12 +8,15 @@ let currentMode = "MASTER";
 let masterRecords = [];
 let simpleRecords = [];
 let stats = {};
-let analyticsFilter = {
-  region: "전체",
-  denomination: "전체",
-  scale: "전체",
-};
 let obsidianVaultPath = "C:\\Users\\20260602\\Documents\\github\\Obsidian";
+let church114Filter = {
+  sido: "전체",
+  sigungu: "전체",
+  emd: "전체",
+};
+let currentGridChurches = [];
+let kakaoApiKey = localStorage.getItem("CHURCH_HUB_KAKAO_API_KEY") || "";
+let naverApiKey = localStorage.getItem("CHURCH_HUB_NAVER_API_KEY") || "";
 
 // Wait for pywebview to initialize
 window.addEventListener("pywebviewready", () => {
@@ -28,8 +31,9 @@ document.addEventListener("DOMContentLoaded", () => {
   setupModeSwitch();
   setupQuickSearch();
   setupFileOperations();
-  setupAnalytics();
+  setupChurch114Analytics();
   setupObsidianSync();
+  setupSettings();
 
   // If pywebview is not loaded within 500ms, use mock data
   setTimeout(() => {
@@ -110,100 +114,24 @@ async function loadInitialState() {
     renderModeUI();
     renderDashboard();
     renderGroundingList();
-    renderAnalytics();
+    loadChurch114Analytics("전체", "전체", "전체");
   }
 }
 
 function loadMockInitialState() {
-  masterRecords = [
-    {
-      row_id: 1,
-      region: "광주",
-      classification: "이사교회",
-      church_name: "광주겨자씨교회",
-      pastor: "나학수",
-      address: "광주광역시 남구 봉선로 12",
-      denomination: "예장합동",
-      congregation_size: 3500,
-      tier: "A",
-      temperature: "Hot",
-      management_type: "본부집중",
-      primary_campaign: "희망친구 결연",
-      primary_campaign_date: "2026-03-15",
-      campaign_status: "제안완료",
-      followup_campaign: "국내위기가정지원",
-      next_action: "추진위원회 방문 미팅",
-      next_contact_date: "2026-09-25",
-      remarks: "담임목사님 창립기념 선물 발송 완료",
-      zip_code: "61642",
-      homepage: "http://www.mustardseed.or.kr",
-      verification_status: "승인완료",
-      homepage_status: "확인완료",
-      scale_tier: "초대형 (3000~)",
-    },
-    {
-      row_id: 2,
-      region: "광주",
-      classification: "타겟교회",
-      church_name: "광주동성교회",
-      pastor: "안성주",
-      address: "",
-      denomination: "예장통합",
-      congregation_size: 800,
-      tier: "B",
-      temperature: "Warm",
-      management_type: "지역본부",
-      primary_campaign: "긴급구호",
-      primary_campaign_date: "2026-05-10",
-      campaign_status: "검토중",
-      followup_campaign: "우물파기",
-      next_action: "자료 이메일 발송",
-      next_contact_date: "2026-09-20",
-      remarks: "주소 확인 후 공문 발송 요청",
-      zip_code: "",
-      homepage: "",
-      verification_status: "미검증",
-      homepage_status: "미검증",
-      scale_tier: "중대형 (500~1000)",
-    },
-  ];
-
-  simpleRecords = [
-    {
-      row_id: 1,
-      church_name: "광주겨자씨교회",
-      pastor: "나학수",
-      region: "광주",
-      road_address: "광주광역시 남구 봉선로 12",
-      zip_code: "61642",
-      homepage: "http://www.mustardseed.or.kr",
-      address_status: "확인완료",
-      homepage_status: "확인완료",
-    },
-    {
-      row_id: 2,
-      church_name: "광주동성교회",
-      pastor: "안성주",
-      region: "광주",
-      road_address: "",
-      zip_code: "",
-      homepage: "",
-      address_status: "미검증",
-      homepage_status: "미검증",
-    },
-  ];
-
+  masterRecords = [];
+  simpleRecords = [];
   stats = {
-    total_count: 2,
-    verified_address_count: 1,
-    missing_address_count: 1,
-    verified_homepage_count: 1,
+    total_count: 0,
+    verified_address_count: 0,
+    missing_address_count: 0,
+    verified_homepage_count: 0,
   };
 
   renderModeUI();
   renderDashboard();
   renderGroundingList();
-  renderAnalytics();
+  loadChurch114Analytics("전체", "전체", "전체");
 }
 
 // --- Mode Switcher ---
@@ -234,7 +162,7 @@ async function switchMode(mode) {
   renderModeUI();
   renderDashboard();
   renderGroundingList();
-  renderAnalytics();
+  loadChurch114Analytics(church114Filter.sido, church114Filter.sigungu, church114Filter.emd);
   showToast(`${mode === "MASTER" ? "마스터 관리 모드" : "간편 주소록 모드"}로 전환되었습니다.`);
 }
 
@@ -274,7 +202,7 @@ function setupTabs() {
       if (targetId === "tab-quick") {
         document.getElementById("quick-search-input").focus();
       } else if (targetId === "tab-analytics") {
-        renderAnalytics();
+        loadChurch114Analytics(church114Filter.sido, church114Filter.sigungu, church114Filter.emd);
       } else if (targetId === "tab-obsidian") {
         loadObsidianSync();
       }
@@ -299,7 +227,40 @@ function renderDashboard() {
   document.getElementById("kpi-homepage").innerText = hpCount;
   document.getElementById("kpi-missing").innerText = records.length - verifiedCount;
 
-  // Table
+  // Empty State vs Table
+  const emptyHero = document.getElementById("dashboard-empty-hero");
+  const tableWrapper = document.getElementById("dashboard-table-wrapper");
+
+  if (records.length === 0) {
+    if (tableWrapper) tableWrapper.style.display = "none";
+    if (emptyHero) {
+      emptyHero.style.display = "block";
+      emptyHero.innerHTML = `
+        <div class="hero-empty-state">
+          <div class="hero-empty-icon">📂</div>
+          <div class="hero-empty-title">불러온 교회 데이터가 없습니다</div>
+          <div class="hero-empty-desc">
+            파트너십 사역 대상 교회 목록이 담긴 엑셀(.xlsx / .csv) 파일을 불러와 작업을 시작하세요.<br>
+            파일을 열면 도로명 주소 검증, 공식 홈페이지 확인, 원클릭 주소 복사 및 지역별 교세 분석 기능을 즉시 활용할 수 있습니다.
+          </div>
+          <div class="hero-empty-actions">
+            <button class="btn btn-primary" onclick="document.getElementById('btn-open-excel').click()">
+              📂 엑셀 파일 열기 (.xlsx/.csv)
+            </button>
+          </div>
+        </div>
+      `;
+    }
+    return;
+  }
+
+  if (tableWrapper) tableWrapper.style.display = "block";
+  if (emptyHero) {
+    emptyHero.style.display = "none";
+    emptyHero.innerHTML = "";
+  }
+
+  // Table rendering
   const headerRow = document.getElementById("table-header-row");
   const tbody = document.getElementById("table-body");
   headerRow.innerHTML = "";
@@ -315,7 +276,7 @@ function renderDashboard() {
       <th>교단</th>
       <th>성도수(명)</th>
       <th>규모분류</th>
-      <th>도로명 주소</th>
+      <th>도로명 주소 (클릭시 복사)</th>
       <th>우편번호</th>
       <th>공식 홈페이지</th>
       <th>주소상태</th>
@@ -326,6 +287,10 @@ function renderDashboard() {
 
     records.forEach((r) => {
       const tr = document.createElement("tr");
+      const addrText = r.address || "";
+      const zipText = r.zip_code || "";
+      const fullCopyStr = addrText ? (zipText ? `${addrText} (${zipText})` : addrText) : "";
+
       tr.innerHTML = `
         <td>${r.row_id}</td>
         <td><strong>${escapeHtml(r.region)}</strong></td>
@@ -335,7 +300,9 @@ function renderDashboard() {
         <td>${escapeHtml(r.denomination) || "-"}</td>
         <td>${r.congregation_size ? r.congregation_size.toLocaleString() : "-"}</td>
         <td><span class="badge badge-primary">${escapeHtml(r.scale_tier) || "-"}</span></td>
-        <td>${r.address ? escapeHtml(r.address) : '<span style="color:#94a3b8">(주소 누락)</span>'}</td>
+        <td class="copyable-cell" title="클릭하여 주소 복사" onclick="${addrText ? `copySingleAddress('${escapeJs(fullCopyStr)}')` : ''}">
+          ${addrText ? `📋 ${escapeHtml(addrText)}` : '<span style="color:#94a3b8">(주소 누락)</span>'}
+        </td>
         <td>${escapeHtml(r.zip_code) || "-"}</td>
         <td>${r.homepage ? `<a href="${sanitizeUrl(r.homepage)}" target="_blank" style="color:var(--primary)">${escapeHtml(r.homepage)}</a>` : "-"}</td>
         <td>${renderStatusBadge(r.verification_status)}</td>
@@ -352,7 +319,7 @@ function renderDashboard() {
       <th>교회명</th>
       <th>담임목사</th>
       <th>지역</th>
-      <th>도로명 주소</th>
+      <th>도로명 주소 (클릭시 복사)</th>
       <th>우편번호</th>
       <th>공식 홈페이지</th>
       <th>검증 상태</th>
@@ -360,12 +327,18 @@ function renderDashboard() {
 
     records.forEach((r) => {
       const tr = document.createElement("tr");
+      const addrText = r.road_address || "";
+      const zipText = r.zip_code || "";
+      const fullCopyStr = addrText ? (zipText ? `${addrText} (${zipText})` : addrText) : "";
+
       tr.innerHTML = `
         <td>${r.row_id}</td>
         <td><strong>${escapeHtml(r.church_name)}</strong></td>
         <td>${escapeHtml(r.pastor)}</td>
         <td>${escapeHtml(r.region)}</td>
-        <td>${r.road_address ? escapeHtml(r.road_address) : '<span style="color:#94a3b8">(주소 미검증)</span>'}</td>
+        <td class="copyable-cell" title="클릭하여 주소 복사" onclick="${addrText ? `copySingleAddress('${escapeJs(fullCopyStr)}')` : ''}">
+          ${addrText ? `📋 ${escapeHtml(addrText)}` : '<span style="color:#94a3b8">(주소 미검증)</span>'}
+        </td>
         <td>${escapeHtml(r.zip_code) || "-"}</td>
         <td>${r.homepage ? `<a href="${sanitizeUrl(r.homepage)}" target="_blank" style="color:var(--primary)">${escapeHtml(r.homepage)}</a>` : "-"}</td>
         <td>${renderStatusBadge(r.address_status)}</td>
@@ -591,29 +564,90 @@ function renderGroundingDetailCard(record, addrCandidates, hpCandidate) {
 
 // --- Quick Dispatcher ---
 
+let currentQuickResults = [];
+
 function setupQuickSearch() {
   const input = document.getElementById("quick-search-input");
-  input.addEventListener("input", async (e) => {
-    const kw = e.target.value;
-    let results = [];
-    if (window.pywebview) {
-      const res = await callApi("quick_search", kw);
-      if (res) results = res.results || [];
-    } else {
-      const source = currentMode === "MASTER" ? masterRecords : simpleRecords;
-      results = source.filter(
-        (r) =>
-          r.church_name.includes(kw) ||
-          r.pastor.includes(kw) ||
-          r.region.includes(kw)
-      );
-    }
-    renderQuickSearchResults(results);
-  });
+  if (input) {
+    input.addEventListener("input", async (e) => {
+      const kw = e.target.value.trim();
+      let results = [];
+      if (!kw) {
+        currentQuickResults = [];
+        renderQuickSearchResults([]);
+        return;
+      }
+      if (window.pywebview) {
+        const res = await callApi("quick_search", kw);
+        if (res) results = res.results || [];
+      } else {
+        const source = currentMode === "MASTER" ? masterRecords : simpleRecords;
+        results = source.filter(
+          (r) =>
+            (r.church_name && r.church_name.includes(kw)) ||
+            (r.pastor && r.pastor.includes(kw)) ||
+            (r.region && r.region.includes(kw))
+        );
+      }
+      currentQuickResults = results;
+      renderQuickSearchResults(results);
+    });
+  }
+
+  // 일괄 선택 복사 버튼
+  const btnCopySelected = document.getElementById("btn-copy-selected-dispatch");
+  if (btnCopySelected) {
+    btnCopySelected.addEventListener("click", () => {
+      const checkedBoxes = document.querySelectorAll(".quick-select-checkbox:checked");
+      if (checkedBoxes.length === 0) {
+        showToast("선택된 교회가 없습니다. 체크박스를 선택해주세요.");
+        return;
+      }
+      const selectedIds = Array.from(checkedBoxes).map((cb) => parseInt(cb.getAttribute("data-row-id"), 10));
+      const selectedChurches = currentQuickResults.filter((r) => selectedIds.includes(r.row_id));
+
+      const copyLines = selectedChurches.map((r) => {
+        const addr = r.address || r.road_address || "주소 미입력";
+        const zip = r.zip_code ? ` (${r.zip_code})` : "";
+        return `${r.church_name} (${r.pastor || "담임목사"} 귀하)\t${addr}${zip}`;
+      });
+
+      const fullText = copyLines.join("\n");
+      navigator.clipboard.writeText(fullText).then(() => {
+        showToast(`선택한 ${selectedChurches.length}개 교회 주소가 클립보드에 복사되었습니다 (줄바꿈 구분).`);
+      }).catch((err) => {
+        console.error("Clipboard copy error:", err);
+        showToast("클립보드 복사에 실패했습니다.");
+      });
+    });
+  }
+
+  // 발송 명단 엑셀/CSV 다운로드 버튼
+  const btnExport = document.getElementById("btn-export-dispatch");
+  if (btnExport) {
+    btnExport.addEventListener("click", () => {
+      const checkedBoxes = document.querySelectorAll(".quick-select-checkbox:checked");
+      let targetList = [];
+      if (checkedBoxes.length > 0) {
+        const selectedIds = Array.from(checkedBoxes).map((cb) => parseInt(cb.getAttribute("data-row-id"), 10));
+        targetList = currentQuickResults.filter((r) => selectedIds.includes(r.row_id));
+      } else {
+        targetList = currentQuickResults;
+      }
+
+      if (targetList.length === 0) {
+        showToast("다운로드할 검색 결과가 없습니다.");
+        return;
+      }
+
+      exportChurchesToCsv(targetList, "발송대상_교회주소록.csv");
+    });
+  }
 }
 
 function renderQuickSearchResults(results) {
   const container = document.getElementById("quick-search-results");
+  if (!container) return;
   container.innerHTML = "";
 
   if (results.length === 0) {
@@ -621,30 +655,86 @@ function renderQuickSearchResults(results) {
     return;
   }
 
+  // 상단 전체선택 바
+  const topBar = document.createElement("div");
+  topBar.style.display = "flex";
+  topBar.style.alignItems = "center";
+  topBar.style.justifyContent = "space-between";
+  topBar.style.padding = "8px 12px";
+  topBar.style.marginBottom = "10px";
+  topBar.style.background = "#f8fafc";
+  topBar.style.borderRadius = "6px";
+  topBar.style.border = "1px solid var(--border)";
+  topBar.innerHTML = `
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer">
+      <input type="checkbox" id="quick-check-all" style="cursor:pointer"> 전체 선택 (${results.length}건)
+    </label>
+    <div style="font-size:12px;color:var(--text-muted)">주소를 클릭하면 해당 주소만 즉시 복사됩니다.</div>
+  `;
+  container.appendChild(topBar);
+
+  const checkAll = topBar.querySelector("#quick-check-all");
+  checkAll.addEventListener("change", (e) => {
+    const isChecked = e.target.checked;
+    container.querySelectorAll(".quick-select-checkbox").forEach((cb) => {
+      cb.checked = isChecked;
+    });
+  });
+
   results.forEach((r) => {
     const card = document.createElement("div");
     card.className = "card";
-    card.style.marginBottom = "14px";
-    const churchAddr = r.address || r.road_address || '<span style="color:#ef4444">주소 누락</span>';
+    card.style.marginBottom = "12px";
+    const rawAddr = r.address || r.road_address || "";
+    const displayAddr = rawAddr ? escapeHtml(rawAddr) : '<span style="color:#ef4444">주소 누락</span>';
+
     card.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <div style="font-size:16px;font-weight:700">${escapeHtml(r.church_name)}</div>
-          <div style="font-size:13px;color:var(--text-muted);margin-top:2px">
-            담임목사: <strong>${escapeHtml(r.pastor)}</strong> | 지역: ${escapeHtml(r.region)} | 우편번호: ${escapeHtml(r.zip_code) || "-"}
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <input type="checkbox" class="quick-select-checkbox" data-row-id="${r.row_id}" style="margin-top:6px;cursor:pointer;width:16px;height:16px" aria-label="선택">
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:16px;font-weight:700">${escapeHtml(r.church_name)}</div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-primary btn-sm" onclick="copyDispatchText('OFFICIAL', ${r.row_id})">📄 공문용 복사</button>
+              <button class="btn btn-secondary btn-sm" onclick="copyDispatchText('PACKAGE', ${r.row_id})">📦 선물용 복사</button>
+            </div>
           </div>
-          <div style="font-size:13px;margin-top:6px">주소: ${r.address || r.road_address ? escapeHtml(r.address || r.road_address) : '<span style="color:#ef4444">주소 누락</span>'}</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:2px">
+            담임목사: <strong>${escapeHtml(r.pastor || "미지정")}</strong> | 지역: ${escapeHtml(r.region || "-")} | 우편번호: ${escapeHtml(r.zip_code) || "-"}
+          </div>
+          <div style="font-size:13px;margin-top:6px">
+            주소: <span class="copyable-cell" onclick="copySingleAddress('${escapeJs(rawAddr)}')" title="클릭 시 주소 복사">${displayAddr}</span>
+          </div>
           ${r.homepage ? `<div style="font-size:12px;color:var(--primary);margin-top:4px">홈페이지: <a href="${sanitizeUrl(r.homepage)}" target="_blank">${escapeHtml(r.homepage)}</a></div>` : ''}
-        </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-primary btn-sm" onclick="copyDispatchText('OFFICIAL', ${r.row_id})">📄 공문용 복사</button>
-          <button class="btn btn-secondary btn-sm" onclick="copyDispatchText('PACKAGE', ${r.row_id})">📦 택배/선물용 복사</button>
-          <button class="btn btn-secondary btn-sm" onclick="copyDispatchText('TSV', ${r.row_id})">📋 엑셀 TSV 복사</button>
         </div>
       </div>
     `;
     container.appendChild(card);
   });
+}
+
+function exportChurchesToCsv(churches, filename = "교회주소록.csv") {
+  const headers = ["교회명", "담임목사", "지역", "도로명주소", "우편번호", "홈페이지"];
+  const rows = churches.map((r) => [
+    `"${(r.church_name || "").replace(/"/g, '""')}"`,
+    `"${(r.pastor || "").replace(/"/g, '""')}"`,
+    `"${(r.region || "").replace(/"/g, '""')}"`,
+    `"${(r.address || r.road_address || "").replace(/"/g, '""')}"`,
+    `"${(r.zip_code || "").replace(/"/g, '""')}"`,
+    `"${(r.homepage || "").replace(/"/g, '""')}"`,
+  ]);
+
+  const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((row) => row.join(","))].join("\r\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`파일이 다운로드되었습니다: ${filename}`);
 }
 
 window.copyDispatchText = async function (type, rowId) {
@@ -676,7 +766,7 @@ window.copyDispatchText = async function (type, rowId) {
   }
 
   navigator.clipboard.writeText(text).then(() => {
-    showToast(`클립보드에 복사되었습니다 (${type === "OFFICIAL" ? "공문용" : type === "PACKAGE" ? "택배/선물용" : "TSV"}).`);
+    showToast(`클립보드에 복사되었습니다 (${type === "OFFICIAL" ? "공문용" : "선물용"}).`);
   }).catch((err) => {
     console.error("Clipboard copy failed:", err);
     showToast("클립보드 복사에 실패했습니다.");
@@ -699,7 +789,7 @@ function setupFileOperations() {
           renderModeUI();
           renderDashboard();
           renderGroundingList();
-          renderAnalytics();
+          loadChurch114Analytics(church114Filter.sido, church114Filter.sigungu, church114Filter.emd);
           showToast(`파일 로드 완료 (${res.mode === "MASTER" ? "마스터 관리 모드" : "간편 주소록 모드"}, 총 ${res.total_count || masterRecords.length || simpleRecords.length}건)`);
         }
       } else {
@@ -764,156 +854,664 @@ function updateLoadedFileIndicator(filePath) {
       const fileName = filePath.split(/[\\/]/).pop();
       indicator.innerText = `현재 파일: ${fileName} (${filePath})`;
     } else {
-      indicator.innerText = "현재 파일: 샘플 데이터";
+      indicator.innerText = "현재 파일: 열린 파일 없음 (엑셀 파일을 열어주세요)";
     }
   }
 }
 
-// --- Phase 4: Analytics, Crosstab Matrix & Drill-down Logic ---
+// --- Phase 4: Church114 Orthodox Engine & Density Vector Map (Marker-less) & Region Detail ---
 
 const SCALE_COLORS = {
-  "소형 (~100)": "#10b981",
-  "중형 (100~500)": "#06b6d4",
-  "중대형 (500~1000)": "#3b82f6",
-  "대형 (1000~3000)": "#f59e0b",
   "초대형 (3000~)": "#ef4444",
+  "대형 (1000~3000)": "#f97316",
+  "중대형 (500~1000)": "#3b82f6",
+  "중형 (100~500)": "#06b6d4",
+  "소형 (~100)": "#10b981",
   "미입력": "#94a3b8",
 };
 
-const SCALE_CATEGORIES_LIST = [
-  "소형 (~100)",
-  "중형 (100~500)",
-  "중대형 (500~1000)",
-  "대형 (1000~3000)",
-  "초대형 (3000~)",
-  "미입력",
-];
+function setupChurch114Analytics() {
+  const sidoSelect = document.getElementById("analytics-sido-select");
+  const sigunguSelect = document.getElementById("analytics-sigungu-select");
+  const emdSelect = document.getElementById("analytics-emd-select");
 
-function classifyScaleFrontend(size) {
-  if (size === null || size === undefined || size <= 0) return "미입력";
-  if (size < 100) return "소형 (~100)";
-  if (size < 500) return "중형 (100~500)";
-  if (size < 1000) return "중대형 (500~1000)";
-  if (size < 3000) return "대형 (1000~3000)";
-  return "초대형 (3000~)";
-}
+  // 시도 셀렉트박스 초기화
+  if (sidoSelect && sidoSelect.children.length <= 1) {
+    if (typeof KOREA_SIDO_LIST !== "undefined") {
+      KOREA_SIDO_LIST.forEach((s) => {
+        const opt = document.createElement("option");
+        opt.value = s.name;
+        opt.innerText = s.name;
+        sidoSelect.appendChild(opt);
+      });
+    }
+  }
 
-function setupAnalytics() {
-  const regionSelect = document.getElementById("analytics-region-select");
-  if (regionSelect) {
-    regionSelect.addEventListener("change", (e) => {
-      analyticsFilter.region = e.target.value;
-      renderAnalytics();
+  // 시도 변경 핸들러
+  if (sidoSelect) {
+    sidoSelect.addEventListener("change", (e) => {
+      const sido = e.target.value;
+      church114Filter.sido = sido;
+      church114Filter.sigungu = "전체";
+      church114Filter.emd = "전체";
+      updateSigunguOptions(sido);
+      updateEmdOptions("전체");
+      loadChurch114Analytics(church114Filter.sido, church114Filter.sigungu, church114Filter.emd);
     });
   }
 
+  // 시군구 변경 핸들러
+  if (sigunguSelect) {
+    sigunguSelect.addEventListener("change", (e) => {
+      const sigungu = e.target.value;
+      church114Filter.sigungu = sigungu;
+      church114Filter.emd = "전체";
+      updateEmdOptions(sigungu);
+      loadChurch114Analytics(church114Filter.sido, church114Filter.sigungu, church114Filter.emd);
+    });
+  }
+
+  // 읍면동 변경 핸들러
+  if (emdSelect) {
+    emdSelect.addEventListener("change", (e) => {
+      const emd = e.target.value;
+      church114Filter.emd = emd;
+      loadChurch114Analytics(church114Filter.sido, church114Filter.sigungu, church114Filter.emd);
+    });
+  }
+
+  // 필터 초기화 버튼
   const btnReset = document.getElementById("btn-reset-analytics-filter");
   if (btnReset) {
     btnReset.addEventListener("click", () => {
-      resetAnalyticsFilter();
+      church114Filter.sido = "전체";
+      church114Filter.sigungu = "전체";
+      church114Filter.emd = "전체";
+      if (sidoSelect) sidoSelect.value = "전체";
+      updateSigunguOptions("전체");
+      updateEmdOptions("전체");
+      loadChurch114Analytics("전체", "전체", "전체");
+    });
+  }
+
+  // 최신 교세 재조사 버튼 (카카오/네이버 API Key 활용)
+  const btnRefresh = document.getElementById("btn-refresh-portal-churches");
+  if (btnRefresh) {
+    btnRefresh.addEventListener("click", async () => {
+      const currentApiKey = kakaoApiKey || naverApiKey;
+      if (!currentApiKey) {
+        showToast("환경설정 탭에서 카카오 또는 네이버 API Key를 먼저 입력해주세요.");
+        const settingsTab = document.querySelector('[data-tab="tab-settings"]');
+        if (settingsTab) settingsTab.click();
+        return;
+      }
+
+      // 검색 대상 지역 쿼리 구성
+      let regionQuery = church114Filter.sido !== "전체" ? church114Filter.sido : "서울특별시";
+      if (church114Filter.sigungu !== "전체") regionQuery += " " + church114Filter.sigungu;
+      if (church114Filter.emd !== "전체") regionQuery += " " + church114Filter.emd;
+
+      btnRefresh.disabled = true;
+      btnRefresh.innerText = "조사 중...";
+      showToast(`'${regionQuery}' 지역 최신 교세를 포털 API로 재조사하는 중입니다...`);
+
+      const provider = kakaoApiKey ? "KAKAO" : "NAVER";
+      if (window.pywebview) {
+        const res = await callApi("refresh_church114_from_portal", regionQuery, provider, currentApiKey);
+        btnRefresh.disabled = false;
+        btnRefresh.innerText = "🔄 최신 교세 재조사";
+        if (res && res.success) {
+          showToast(`'${regionQuery}' 지역 신규/갱신 교회 ${res.count}건을 정통교단 DB에 반영했습니다.`);
+          await loadChurch114Analytics(church114Filter.sido, church114Filter.sigungu, church114Filter.emd);
+        } else {
+          showToast(`재조사 실패: ${res ? res.error : "알 수 없는 오류"}`);
+        }
+      } else {
+        setTimeout(() => {
+          btnRefresh.disabled = false;
+          btnRefresh.innerText = "🔄 최신 교세 재조사";
+          showToast(`'${regionQuery}' 지역 최신 교세 재조사 완료 (미리보기 모드)`);
+        }, 800);
+      }
+    });
+  }
+
+  // 그리드 검색 및 선택 복사/내보내기 이벤트
+  const gridSearch = document.getElementById("region-grid-search-input");
+  if (gridSearch) {
+    gridSearch.addEventListener("input", (e) => {
+      filterAndRenderGrid(e.target.value.trim());
+    });
+  }
+
+  const gridSelectAll = document.getElementById("grid-select-all");
+  if (gridSelectAll) {
+    gridSelectAll.addEventListener("change", (e) => {
+      const isChecked = e.target.checked;
+      document.querySelectorAll(".region-grid-checkbox").forEach((cb) => {
+        cb.checked = isChecked;
+      });
+    });
+  }
+
+  const btnCopyGrid = document.getElementById("btn-copy-grid-selected");
+  if (btnCopyGrid) {
+    btnCopyGrid.addEventListener("click", () => {
+      const checkedBoxes = document.querySelectorAll(".region-grid-checkbox:checked");
+      if (checkedBoxes.length === 0) {
+        showToast("선택된 교회가 없습니다. 체크박스를 선택해주세요.");
+        return;
+      }
+      const selectedIds = Array.from(checkedBoxes).map((cb) => parseInt(cb.getAttribute("data-id"), 10));
+      const targets = currentGridChurches.filter((c) => selectedIds.includes(c.id));
+      const textLines = targets.map((c) => {
+        const zip = c.zip_code ? ` (${c.zip_code})` : "";
+        return `${c.church_name} (${c.pastor || "담임목사"} 귀하)\t${c.road_address}${zip}`;
+      });
+      navigator.clipboard.writeText(textLines.join("\n")).then(() => {
+        showToast(`선택한 ${targets.length}개 교회의 주소가 복사되었습니다 (줄바꿈 구분).`);
+      }).catch(() => {
+        showToast("클립보드 복사에 실패했습니다.");
+      });
+    });
+  }
+
+  const btnExportGrid = document.getElementById("btn-export-grid-excel");
+  if (btnExportGrid) {
+    btnExportGrid.addEventListener("click", () => {
+      if (currentGridChurches.length === 0) {
+        showToast("내보낼 데이터가 없습니다.");
+        return;
+      }
+      const checkedBoxes = document.querySelectorAll(".region-grid-checkbox:checked");
+      let exportList = currentGridChurches;
+      if (checkedBoxes.length > 0) {
+        const selectedIds = Array.from(checkedBoxes).map((cb) => parseInt(cb.getAttribute("data-id"), 10));
+        exportList = currentGridChurches.filter((c) => selectedIds.includes(c.id));
+      }
+      const regionLabel = church114Filter.sido !== "전체" ? church114Filter.sido : "전국";
+      exportChurchesToCsv(exportList, `${regionLabel}_정통교단_교회명단.csv`);
     });
   }
 }
 
-function resetAnalyticsFilter() {
-  analyticsFilter.region = "전체";
-  analyticsFilter.denomination = "전체";
-  analyticsFilter.scale = "전체";
-  const regionSelect = document.getElementById("analytics-region-select");
-  if (regionSelect) regionSelect.value = "전체";
-  renderAnalytics();
-}
+function updateSigunguOptions(sido) {
+  const select = document.getElementById("analytics-sigungu-select");
+  if (!select) return;
+  select.innerHTML = `<option value="전체">시군구 전체</option>`;
 
-function setAnalyticsFilter(field, value) {
-  if (analyticsFilter[field] === value) {
-    analyticsFilter[field] = "전체";
-  } else {
-    analyticsFilter[field] = value;
+  if (sido === "서울특별시" && typeof SEOUL_DISTRICTS !== "undefined") {
+    SEOUL_DISTRICTS.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.name;
+      opt.innerText = d.name;
+      select.appendChild(opt);
+    });
+  } else if (sido === "경기도") {
+    ["성남시 분당구", "수원시", "용인시", "고양시", "안양시", "부천시", "화성시"].forEach((g) => {
+      const opt = document.createElement("option");
+      opt.value = g;
+      opt.innerText = g;
+      select.appendChild(opt);
+    });
+  } else if (sido === "부산광역시") {
+    ["해운대구", "수영구", "부산진구", "동래구", "강서구", "중구"].forEach((g) => {
+      const opt = document.createElement("option");
+      opt.value = g;
+      opt.innerText = g;
+      select.appendChild(opt);
+    });
+  } else if (sido === "광주광역시") {
+    ["남구", "동구", "서구", "북구", "광산구"].forEach((g) => {
+      const opt = document.createElement("option");
+      opt.value = g;
+      opt.innerText = g;
+      select.appendChild(opt);
+    });
   }
-  renderAnalytics();
 }
 
-function setAnalyticsCellFilter(denom, scale) {
-  if (analyticsFilter.denomination === denom && analyticsFilter.scale === scale) {
-    analyticsFilter.denomination = "전체";
-    analyticsFilter.scale = "전체";
-  } else {
-    analyticsFilter.denomination = denom;
-    analyticsFilter.scale = scale;
+function updateEmdOptions(sigungu) {
+  const select = document.getElementById("analytics-emd-select");
+  if (!select) return;
+  select.innerHTML = `<option value="전체">읍면동 전체</option>`;
+
+  if (sigungu === "강남구" && typeof GANGNAM_DONGS !== "undefined") {
+    GANGNAM_DONGS.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.name;
+      opt.innerText = d.name;
+      select.appendChild(opt);
+    });
+  } else if (sigungu === "서초구") {
+    ["서초동", "양재동", "방배동", "반포동", "잠원동"].forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d;
+      opt.innerText = d;
+      select.appendChild(opt);
+    });
+  } else if (sigungu === "성남시 분당구") {
+    ["이매동", "구미동", "야탑동", "서현동", "정자동", "판교동"].forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d;
+      opt.innerText = d;
+      select.appendChild(opt);
+    });
   }
-  renderAnalytics();
 }
 
-async function renderAnalytics() {
-  let data = null;
+async function loadChurch114Analytics(sido = "전체", sigungu = "전체", emd = "전체") {
+  church114Filter.sido = sido;
+  church114Filter.sigungu = sigungu;
+  church114Filter.emd = emd;
+
+  let analyticsData = null;
+  let top10Data = null;
+  let gridData = null;
 
   if (window.pywebview) {
-    const reg = analyticsFilter.region === "전체" ? null : analyticsFilter.region;
-    const den = analyticsFilter.denomination === "전체" ? null : analyticsFilter.denomination;
-    const sca = analyticsFilter.scale === "전체" ? null : analyticsFilter.scale;
-    data = await callApi("get_analytics", reg, den, sca);
+    analyticsData = await callApi("get_church114_analytics", sido, sigungu, emd);
+    top10Data = await callApi("get_church114_top10", sido, sigungu, emd);
+    gridData = await callApi("get_church114_grid", sido, sigungu, emd);
   }
 
-  if (!data) {
-    // Preview / Mock Fallback
-    data = calculateMockAnalytics(masterRecords, analyticsFilter);
+  // Fallback if null (미리보기 모드 또는 오프라인)
+  if (!analyticsData) {
+    analyticsData = {
+      scope: sido === "전체" ? "SIDO" : sigungu === "전체" ? "SIGUNGU" : "EUPMYEONDONG",
+      region_name: sido !== "전체" ? sido : "전국",
+      summary: {
+        total_churches: 24,
+        total_members: 198000,
+        avg_members: 8250,
+        top_denomination: "예장합동",
+        top_denomination_ratio: 41.7,
+      },
+      denominations: [
+        { denomination: "예장합동", count: 10, ratio: 41.7 },
+        { denomination: "예장통합", count: 6, ratio: 25.0 },
+        { denomination: "기독교대한감리회", count: 3, ratio: 12.5 },
+        { denomination: "기독교한국침례회", count: 2, ratio: 8.3 },
+        { denomination: "예장백석", count: 2, ratio: 8.3 },
+        { denomination: "기독교대한성결교회", count: 1, ratio: 4.2 },
+      ],
+      scale_tiers: [
+        { scale: "초대형 (3000~)", count: 18, ratio: 75.0 },
+        { scale: "대형 (1000~3000)", count: 2, ratio: 8.3 },
+        { scale: "중대형 (500~1000)", count: 3, ratio: 12.5 },
+        { scale: "중형 (100~500)", count: 1, ratio: 4.2 },
+        { scale: "소형 (~100)", count: 0, ratio: 0.0 },
+      ],
+      sub_regions: [
+        { name: "서울특별시", church_count: 14, total_members: 135000, top_denomination: "예장합동", top_denom_ratio: 42.8, density_score: 1.0, density_color: "#ef4444" },
+        { name: "경기도", church_count: 3, total_members: 55000, top_denomination: "기독교한국침례회", top_denom_ratio: 33.3, density_score: 0.6, density_color: "#f97316" },
+        { name: "부산광역시", church_count: 2, total_members: 41000, top_denomination: "예장합동", top_denom_ratio: 100.0, density_score: 0.4, density_color: "#06b6d4" },
+        { name: "광주광역시", church_count: 4, total_members: 14000, top_denomination: "예장합동", top_denom_ratio: 50.0, density_score: 0.7, density_color: "#ef4444" },
+        { name: "대전광역시", church_count: 2, total_members: 15000, top_denomination: "예장합동", top_denom_ratio: 50.0, density_score: 0.4, density_color: "#06b6d4" },
+      ],
+    };
   }
 
-  if (!data) return;
+  if (!top10Data) {
+    top10Data = [
+      { id: 1, church_name: "사랑의교회", denomination: "예장합동", pastor: "오정현", congregation_size: 35000, scale_tier: "초대형 (3000~)", road_address: "서울특별시 서초구 반포대로 121", phone: "02-3479-7711", homepage: "http://www.sarang.org" },
+      { id: 2, church_name: "수영로교회", denomination: "예장합동", pastor: "이규현", congregation_size: 30000, scale_tier: "초대형 (3000~)", road_address: "부산광역시 해운대구 해운대해변로 33", phone: "051-740-4500", homepage: "http://www.sooyoungro.org" },
+      { id: 3, church_name: "온누리교회(양재)", denomination: "예장통합", pastor: "이재훈", congregation_size: 28000, scale_tier: "초대형 (3000~)", road_address: "서울특별시 서초구 바우뫼로31길 70", phone: "02-570-7000", homepage: "http://www.onnuri.org" },
+      { id: 4, church_name: "오륜교회", denomination: "예장합동", pastor: "김은호", congregation_size: 25000, scale_tier: "초대형 (3000~)", road_address: "서울특별시 송파구 강동대로 235", phone: "02-485-4004", homepage: "http://www.oryun.org" },
+      { id: 5, church_name: "지구촌교회", denomination: "기독교한국침례회", pastor: "최성은", congregation_size: 23000, scale_tier: "초대형 (3000~)", road_address: "경기도 성남시 분당구 미금일로 154", phone: "031-710-7600", homepage: "http://www.jiguchon.or.kr" },
+    ];
+  }
 
-  // 1. Update Region Select Options
-  updateRegionSelectOptions(data.regional_breakdown);
+  if (!gridData) {
+    gridData = top10Data;
+  }
 
-  // 2. Summary Metric Cards
+  // 1. 지도 렌더링 (마커 0개, 순수 단계구분도 채색)
+  renderOrthodoxMap(analyticsData.sub_regions || [], analyticsData.scope || "SIDO", analyticsData);
+
+  // 2. 지역 상세 분석 페이지 렌더링 (모든 지표 제공)
+  renderRegionDetail(analyticsData, top10Data || [], gridData || []);
+}
+
+// --- Map Rendering Engine (Marker-less Interactive Choropleth Heatmap) ---
+
+function renderOrthodoxMap(subRegions, scope, analyticsData) {
+  const svg = document.getElementById("orthodox-map-svg");
+  const title = document.getElementById("map-current-view-title");
+  const tooltip = document.getElementById("map-hover-tooltip");
+  if (!svg) return;
+
+  svg.innerHTML = "";
+
+  // 뷰 타이틀 갱신
+  if (title) {
+    if (scope === "SIDO") {
+      title.innerText = "📍 전국 17개 광역시도 교회 밀집도 (클릭 시 해당 시도로 줌인)";
+    } else if (scope === "SIGUNGU") {
+      title.innerText = `📍 ${church114Filter.sido} 시군구별 교회 밀집도 (클릭 시 해당 구로 줌인)`;
+    } else {
+      title.innerText = `📍 ${church114Filter.sido} ${church114Filter.sigungu} 읍면동별 교회 밀집도`;
+    }
+  }
+
+  // 밀도 색상 맵 매핑
+  const regionMap = {};
+  subRegions.forEach((r) => {
+    regionMap[r.name] = r;
+  });
+
+  // 툴팁 헬퍼
+  const showTooltip = (e, info) => {
+    if (!tooltip) return;
+    tooltip.innerHTML = `
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:#38bdf8">${escapeHtml(info.name)}</div>
+      <div>총 교회: <strong>${info.church_count || 0}개</strong></div>
+      <div>1위 교단: <strong>${escapeHtml(info.top_denomination || "-")}</strong> (${info.top_denom_ratio || 0}%)</div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:4px">클릭하여 상세 분석으로 이동 🔍</div>
+    `;
+    tooltip.style.display = "block";
+    const container = document.getElementById("orthodox-density-map-container");
+    const rect = container ? container.getBoundingClientRect() : { left: 0, top: 0 };
+    tooltip.style.left = `${e.clientX - rect.left + 14}px`;
+    tooltip.style.top = `${e.clientY - rect.top + 10}px`;
+  };
+
+  const hideTooltip = () => {
+    if (tooltip) tooltip.style.display = "none";
+  };
+
+  // SVG 베이스 그룹
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+
+  if (scope === "SIDO") {
+    // 전국 17개 시도 타일 벡터 맵
+    svg.setAttribute("viewBox", "0 0 500 620");
+
+    if (typeof KOREA_SIDO_LIST !== "undefined") {
+      KOREA_SIDO_LIST.forEach((item) => {
+        const info = regionMap[item.name] || { name: item.name, church_count: 0, density_color: "#3b82f6", top_denomination: "-", top_denom_ratio: 0 };
+        const fillColor = info.density_color || "#3b82f6";
+
+        const tileGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        tileGroup.style.cursor = "pointer";
+        tileGroup.style.transition = "transform 0.15s ease";
+
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("x", item.cx - item.w / 2);
+        rect.setAttribute("y", item.cy - item.h / 2);
+        rect.setAttribute("width", item.w);
+        rect.setAttribute("height", item.h);
+        rect.setAttribute("rx", "10");
+        rect.setAttribute("ry", "10");
+        rect.setAttribute("fill", fillColor);
+        rect.setAttribute("stroke", "#ffffff");
+        rect.setAttribute("stroke-width", "2");
+        rect.setAttribute("opacity", "0.92");
+
+        // 텍스트 (시도 이름)
+        const textName = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        textName.setAttribute("x", item.cx);
+        textName.setAttribute("y", item.cy - 4);
+        textName.setAttribute("text-anchor", "middle");
+        textName.setAttribute("fill", "#ffffff");
+        textName.setAttribute("font-size", "13");
+        textName.setAttribute("font-weight", "700");
+        textName.setAttribute("pointer-events", "none");
+        textName.textContent = item.short;
+
+        // 텍스트 (교회 수)
+        const textCount = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        textCount.setAttribute("x", item.cx);
+        textCount.setAttribute("y", item.cy + 14);
+        textCount.setAttribute("text-anchor", "middle");
+        textCount.setAttribute("fill", "rgba(255,255,255,0.9)");
+        textCount.setAttribute("font-size", "11");
+        textCount.setAttribute("font-weight", "600");
+        textCount.setAttribute("pointer-events", "none");
+        textCount.textContent = `${info.church_count || 0}개`;
+
+        // 상호작용
+        tileGroup.addEventListener("mouseenter", (e) => {
+          rect.setAttribute("opacity", "1");
+          rect.setAttribute("stroke-width", "3");
+          showTooltip(e, info);
+        });
+        tileGroup.addEventListener("mousemove", (e) => {
+          showTooltip(e, info);
+        });
+        tileGroup.addEventListener("mouseleave", () => {
+          rect.setAttribute("opacity", "0.92");
+          rect.setAttribute("stroke-width", "2");
+          hideTooltip();
+        });
+        tileGroup.addEventListener("click", () => {
+          hideTooltip();
+          const sidoSelect = document.getElementById("analytics-sido-select");
+          if (sidoSelect) sidoSelect.value = item.name;
+          church114Filter.sido = item.name;
+          church114Filter.sigungu = "전체";
+          church114Filter.emd = "전체";
+          updateSigunguOptions(item.name);
+          updateEmdOptions("전체");
+          loadChurch114Analytics(item.name, "전체", "전체");
+        });
+
+        tileGroup.appendChild(rect);
+        tileGroup.appendChild(textName);
+        tileGroup.appendChild(textCount);
+        g.appendChild(tileGroup);
+      });
+    }
+
+  } else if (scope === "SIGUNGU") {
+    // 특정 시도 자치구 그리드 맵
+    svg.setAttribute("viewBox", "0 0 500 350");
+
+    let districtList = [];
+    if (church114Filter.sido === "서울특별시" && typeof SEOUL_DISTRICTS !== "undefined") {
+      districtList = SEOUL_DISTRICTS.map((d) => ({ name: d.name, cx: d.cx, cy: d.cy }));
+    } else {
+      // 기타 시도는 subRegions 기반 격자 배치
+      districtList = subRegions.map((r, idx) => {
+        const col = idx % 5;
+        const row = Math.floor(idx / 5);
+        return { name: r.name, cx: 80 + col * 85, cy: 60 + row * 60 };
+      });
+    }
+
+    districtList.forEach((d) => {
+      const info = regionMap[d.name] || { name: d.name, church_count: 0, density_color: "#3b82f6", top_denomination: "-", top_denom_ratio: 0 };
+      const fillColor = info.density_color || "#3b82f6";
+
+      const tileGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      tileGroup.style.cursor = "pointer";
+
+      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      rect.setAttribute("x", d.cx - 36);
+      rect.setAttribute("y", d.cy - 22);
+      rect.setAttribute("width", "72");
+      rect.setAttribute("height", "44");
+      rect.setAttribute("rx", "8");
+      rect.setAttribute("ry", "8");
+      rect.setAttribute("fill", fillColor);
+      rect.setAttribute("stroke", "#ffffff");
+      rect.setAttribute("stroke-width", "2");
+      rect.setAttribute("opacity", "0.92");
+
+      const textName = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      textName.setAttribute("x", d.cx);
+      textName.setAttribute("y", d.cy - 4);
+      textName.setAttribute("text-anchor", "middle");
+      textName.setAttribute("fill", "#ffffff");
+      textName.setAttribute("font-size", "12");
+      textName.setAttribute("font-weight", "700");
+      textName.setAttribute("pointer-events", "none");
+      textName.textContent = d.name;
+
+      const textCount = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      textCount.setAttribute("x", d.cx);
+      textCount.setAttribute("y", d.cy + 12);
+      textCount.setAttribute("text-anchor", "middle");
+      textCount.setAttribute("fill", "rgba(255,255,255,0.9)");
+      textCount.setAttribute("font-size", "10");
+      textCount.setAttribute("font-weight", "600");
+      textCount.setAttribute("pointer-events", "none");
+      textCount.textContent = `${info.church_count || 0}개`;
+
+      tileGroup.addEventListener("mouseenter", (e) => showTooltip(e, info));
+      tileGroup.addEventListener("mousemove", (e) => showTooltip(e, info));
+      tileGroup.addEventListener("mouseleave", () => hideTooltip());
+      tileGroup.addEventListener("click", () => {
+        hideTooltip();
+        const sigunguSelect = document.getElementById("analytics-sigungu-select");
+        if (sigunguSelect) sigunguSelect.value = d.name;
+        church114Filter.sigungu = d.name;
+        church114Filter.emd = "전체";
+        updateEmdOptions(d.name);
+        loadChurch114Analytics(church114Filter.sido, d.name, "전체");
+      });
+
+      tileGroup.appendChild(rect);
+      tileGroup.appendChild(textName);
+      tileGroup.appendChild(textCount);
+      g.appendChild(tileGroup);
+    });
+
+  } else {
+    // 읍면동 상세 그리드 맵
+    svg.setAttribute("viewBox", "0 0 500 320");
+
+    let dongList = [];
+    if (church114Filter.sigungu === "강남구" && typeof GANGNAM_DONGS !== "undefined") {
+      dongList = GANGNAM_DONGS.map((d) => ({ name: d.name, cx: d.cx, cy: d.cy }));
+    } else {
+      dongList = subRegions.map((r, idx) => {
+        const col = idx % 4;
+        const row = Math.floor(idx / 4);
+        return { name: r.name, cx: 80 + col * 105, cy: 60 + row * 65 };
+      });
+    }
+
+    dongList.forEach((d) => {
+      const info = regionMap[d.name] || { name: d.name, church_count: 0, density_color: "#3b82f6", top_denomination: "-", top_denom_ratio: 0 };
+      const fillColor = info.density_color || "#3b82f6";
+
+      const tileGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      tileGroup.style.cursor = "pointer";
+
+      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      rect.setAttribute("x", d.cx - 42);
+      rect.setAttribute("y", d.cy - 24);
+      rect.setAttribute("width", "84");
+      rect.setAttribute("height", "48");
+      rect.setAttribute("rx", "8");
+      rect.setAttribute("ry", "8");
+      rect.setAttribute("fill", fillColor);
+      rect.setAttribute("stroke", "#ffffff");
+      rect.setAttribute("stroke-width", "2");
+      rect.setAttribute("opacity", "0.92");
+
+      const textName = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      textName.setAttribute("x", d.cx);
+      textName.setAttribute("y", d.cy - 4);
+      textName.setAttribute("text-anchor", "middle");
+      textName.setAttribute("fill", "#ffffff");
+      textName.setAttribute("font-size", "12");
+      textName.setAttribute("font-weight", "700");
+      textName.setAttribute("pointer-events", "none");
+      textName.textContent = d.name;
+
+      const textCount = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      textCount.setAttribute("x", d.cx);
+      textCount.setAttribute("y", d.cy + 13);
+      textCount.setAttribute("text-anchor", "middle");
+      textCount.setAttribute("fill", "rgba(255,255,255,0.9)");
+      textCount.setAttribute("font-size", "10");
+      textCount.setAttribute("font-weight", "600");
+      textCount.setAttribute("pointer-events", "none");
+      textCount.textContent = `${info.church_count || 0}개`;
+
+      tileGroup.addEventListener("mouseenter", (e) => showTooltip(e, info));
+      tileGroup.addEventListener("mousemove", (e) => showTooltip(e, info));
+      tileGroup.addEventListener("mouseleave", () => hideTooltip());
+      tileGroup.addEventListener("click", () => {
+        hideTooltip();
+        const emdSelect = document.getElementById("analytics-emd-select");
+        if (emdSelect) emdSelect.value = d.name;
+        church114Filter.emd = d.name;
+        loadChurch114Analytics(church114Filter.sido, church114Filter.sigungu, d.name);
+      });
+
+      tileGroup.appendChild(rect);
+      tileGroup.appendChild(textName);
+      tileGroup.appendChild(textCount);
+      g.appendChild(tileGroup);
+    });
+  }
+
+  svg.appendChild(g);
+}
+
+// --- Detailed Region Analytics Page Renderer (All Metrics Provided) ---
+
+function renderRegionDetail(data, top10, grid) {
+  currentGridChurches = grid;
+
+  // 지역 타이틀 레이블
+  let regionLabel = "전국";
+  if (church114Filter.sido !== "전체") {
+    regionLabel = church114Filter.sido;
+    if (church114Filter.sigungu !== "전체") {
+      regionLabel += ` ${church114Filter.sigungu}`;
+      if (church114Filter.emd !== "전체") {
+        regionLabel += ` ${church114Filter.emd}`;
+      }
+    }
+  }
+
+  // 1. 4대 요약 카드
   const summary = data.summary || {};
-  const elTotalChurches = document.getElementById("analytics-total-churches");
-  const elRegionalShare = document.getElementById("analytics-regional-share");
-  const elTotalMembers = document.getElementById("analytics-total-members");
-  const elEnteredCount = document.getElementById("analytics-entered-count");
-  const elAvgMembers = document.getElementById("analytics-avg-members");
-  const elMaxMinMembers = document.getElementById("analytics-max-min-members");
-  const elEnteredRatio = document.getElementById("analytics-entered-ratio");
-  const elMissingCount = document.getElementById("analytics-missing-count");
+  const elTotal = document.getElementById("region-total-churches");
+  const elScope = document.getElementById("region-scope-label");
+  const elMembers = document.getElementById("region-total-members");
+  const elAvg = document.getElementById("region-avg-members");
+  const elTopDenom = document.getElementById("region-top-denomination");
+  const elTopRatio = document.getElementById("region-top-denom-ratio");
 
-  if (elTotalChurches) elTotalChurches.innerText = `${summary.total_churches || 0}개`;
-  if (elRegionalShare) {
-    elRegionalShare.innerText =
-      analyticsFilter.region !== "전체"
-        ? `선택 지역: ${analyticsFilter.region}`
-        : "전체 지역 기준";
-  }
-  if (elTotalMembers) elTotalMembers.innerText = `${(summary.total_members || 0).toLocaleString()}명`;
-  if (elEnteredCount) elEnteredCount.innerText = `${summary.entered_count || 0}개 교회 합산`;
-  if (elAvgMembers) elAvgMembers.innerText = `${(summary.avg_members || 0).toLocaleString()}명`;
-  if (elMaxMinMembers) {
-    elMaxMinMembers.innerText = `최대 ${(summary.max_members || 0).toLocaleString()}명 / 최소 ${(summary.min_members || 0).toLocaleString()}명`;
-  }
-  if (elEnteredRatio) elEnteredRatio.innerText = `${summary.entered_ratio || 0}%`;
-  if (elMissingCount) elMissingCount.innerText = `미입력 ${summary.missing_count || 0}개`;
+  if (elTotal) elTotal.innerText = `${(summary.total_churches || 0).toLocaleString()}개`;
+  if (elScope) elScope.innerText = `${regionLabel} 기준`;
+  if (elMembers) elMembers.innerText = `${(summary.total_members || 0).toLocaleString()}명`;
+  if (elAvg) elAvg.innerText = `${(summary.avg_members || 0).toLocaleString()}명`;
+  if (elTopDenom) elTopDenom.innerText = summary.top_denomination || "-";
+  if (elTopRatio) elTopRatio.innerText = `점유율 ${summary.top_denomination_ratio || 0}%`;
 
-  // 3. Denomination Distribution Bars
-  const denomContainer = document.getElementById("analytics-denom-list");
+  // 2. 교단별 상세 점유율 현황 (표/바)
+  const denomContainer = document.getElementById("region-denom-breakdown-list");
   if (denomContainer) {
     denomContainer.innerHTML = "";
-    const denoms = data.denomination_distribution || [];
+    const denoms = data.denominations || [];
     if (denoms.length === 0) {
       denomContainer.innerHTML = `<div style="font-size:13px;color:var(--text-muted);padding:8px">데이터가 없습니다.</div>`;
     } else {
       denoms.forEach((d) => {
-        const isActive = analyticsFilter.denomination === d.name;
         const row = document.createElement("div");
-        row.className = `analytics-bar-item ${isActive ? "active" : ""}`;
-        row.title = `클릭 시 [${d.name}] 필터링`;
-        row.onclick = () => setAnalyticsFilter("denomination", d.name);
+        row.style.marginBottom = "10px";
+        row.style.cursor = "pointer";
+        row.title = `클릭 시 [${d.denomination}] 교회 그리드 필터링`;
+        row.onclick = () => {
+          const searchInput = document.getElementById("region-grid-search-input");
+          if (searchInput) {
+            searchInput.value = d.denomination;
+            filterAndRenderGrid(d.denomination);
+          }
+        };
         row.innerHTML = `
           <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
-            <span style="font-weight:${isActive ? "700" : "500"};color:${isActive ? "var(--primary)" : "inherit"}">
-              ${escapeHtml(d.name)}
-            </span>
+            <span style="font-weight:600">${escapeHtml(d.denomination)}</span>
             <strong style="font-size:12px">${d.count}개 (${d.ratio}%)</strong>
           </div>
           <div style="background:#e2e8f0;height:8px;border-radius:4px;overflow:hidden">
-            <div style="background:var(--primary);width:${d.ratio}%;height:100%"></div>
+            <div style="background:var(--primary);width:${d.ratio}%;height:100%;border-radius:4px"></div>
           </div>
         `;
         denomContainer.appendChild(row);
@@ -921,30 +1519,34 @@ async function renderAnalytics() {
     }
   }
 
-  // 4. Scale Distribution Bars
-  const scaleContainer = document.getElementById("analytics-scale-list");
+  // 3. 성도 수 5단계 규모별 분포
+  const scaleContainer = document.getElementById("region-scale-breakdown-list");
   if (scaleContainer) {
     scaleContainer.innerHTML = "";
-    const scales = data.scale_distribution || [];
+    const scales = data.scale_tiers || [];
     if (scales.length === 0) {
       scaleContainer.innerHTML = `<div style="font-size:13px;color:var(--text-muted);padding:8px">데이터가 없습니다.</div>`;
     } else {
       scales.forEach((t) => {
-        const isActive = analyticsFilter.scale === t.scale;
-        const color = SCALE_COLORS[t.scale] || "var(--success)";
+        const color = SCALE_COLORS[t.scale] || "var(--primary)";
         const row = document.createElement("div");
-        row.className = `analytics-bar-item ${isActive ? "active" : ""}`;
-        row.title = `클릭 시 [${t.scale}] 필터링`;
-        row.onclick = () => setAnalyticsFilter("scale", t.scale);
+        row.style.marginBottom = "10px";
+        row.style.cursor = "pointer";
+        row.title = `클릭 시 [${t.scale}] 교회 그리드 필터링`;
+        row.onclick = () => {
+          const searchInput = document.getElementById("region-grid-search-input");
+          if (searchInput) {
+            searchInput.value = t.scale.split(" ")[0];
+            filterAndRenderGrid(searchInput.value);
+          }
+        };
         row.innerHTML = `
           <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
-            <span style="font-weight:${isActive ? "700" : "500"};color:${isActive ? "var(--primary)" : "inherit"}">
-              ${escapeHtml(t.scale)}
-            </span>
+            <span style="font-weight:600">${escapeHtml(t.scale)}</span>
             <strong style="font-size:12px">${t.count}개 (${t.ratio}%)</strong>
           </div>
           <div style="background:#e2e8f0;height:8px;border-radius:4px;overflow:hidden">
-            <div style="background:${color};width:${t.ratio}%;height:100%"></div>
+            <div style="background:${color};width:${t.ratio}%;height:100%;border-radius:4px"></div>
           </div>
         `;
         scaleContainer.appendChild(row);
@@ -952,337 +1554,139 @@ async function renderAnalytics() {
     }
   }
 
-  // 5. Cross-tabulation Matrix Table
-  const crosstabTable = document.getElementById("analytics-crosstab-table");
-  if (crosstabTable && data.crosstab) {
-    renderCrosstabTable(crosstabTable, data.crosstab);
-  }
+  // 4. 해당 지역 [성도 수 상위 TOP 10 랭킹 카드]
+  const top10Title = document.getElementById("region-top10-title");
+  if (top10Title) top10Title.innerText = regionLabel;
 
-  // 6. Active Filter Chips
-  renderActiveFilterChips();
+  const top10Tbody = document.getElementById("region-top10-tbody");
+  if (top10Tbody) {
+    top10Tbody.innerHTML = "";
+    if (!top10 || top10.length === 0) {
+      top10Tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">등록된 상위 거점 교회가 없습니다.</td></tr>`;
+    } else {
+      top10.forEach((c, idx) => {
+        const rank = idx + 1;
+        const rankBadgeStyle =
+          rank === 1
+            ? "background:#fef08a;color:#854d0e;font-weight:800"
+            : rank === 2
+            ? "background:#e2e8f0;color:#334155;font-weight:800"
+            : rank === 3
+            ? "background:#fed7aa;color:#9a3412;font-weight:800"
+            : "background:#f1f5f9;color:var(--text-muted);font-weight:600";
 
-  // 7. Drill-down Detail Table
-  renderDrilldownTable(data.churches || [], data.drilldown_count || 0);
-}
-
-function updateRegionSelectOptions(regionalBreakdown) {
-  const select = document.getElementById("analytics-region-select");
-  if (!select) return;
-
-  const currentVal = analyticsFilter.region;
-  // Keep track of existing values to avoid unnecessary re-creation
-  const regions = ["전체"];
-  if (regionalBreakdown && regionalBreakdown.length > 0) {
-    regionalBreakdown.forEach((r) => {
-      if (r.region && !regions.includes(r.region)) {
-        regions.push(r.region);
-      }
-    });
-  }
-
-  select.innerHTML = "";
-  regions.forEach((reg) => {
-    const opt = document.createElement("option");
-    opt.value = reg;
-    opt.innerText = reg === "전체" ? "전체 지역" : reg;
-    if (reg === currentVal) opt.selected = true;
-    select.appendChild(opt);
-  });
-}
-
-function renderCrosstabTable(table, crosstab) {
-  const columns = crosstab.columns || SCALE_CATEGORIES_LIST;
-  const rows = crosstab.rows || [];
-  const colTotals = crosstab.column_totals || {};
-  const grandTotal = crosstab.grand_total || 0;
-
-  let html = `<thead><tr><th style="min-width:120px">교단 \\ 규모</th>`;
-  columns.forEach((col) => {
-    const isColActive = analyticsFilter.scale === col;
-    html += `
-      <th class="crosstab-header-clickable ${isColActive ? "active" : ""}"
-          onclick="setAnalyticsFilter('scale', '${escapeHtml(col)}')"
-          title="클릭 시 [${escapeHtml(col)}] 규모 필터링">
-        ${escapeHtml(col)}
-      </th>`;
-  });
-  html += `<th style="min-width:70px">교단 합계</th></tr></thead><tbody>`;
-
-  if (rows.length === 0) {
-    html += `<tr><td colspan="${columns.length + 2}" style="color:var(--text-muted);padding:24px">집계 데이터가 없습니다.</td></tr>`;
-  } else {
-    rows.forEach((row) => {
-      const isRowActive = analyticsFilter.denomination === row.denomination;
-      html += `<tr>`;
-      html += `
-        <td class="crosstab-row-title ${isRowActive ? "active" : ""}"
-            onclick="setAnalyticsFilter('denomination', '${escapeHtml(row.denomination)}')"
-            title="클릭 시 [${escapeHtml(row.denomination)}] 교단 필터링">
-          ${escapeHtml(row.denomination)}
-        </td>`;
-
-      columns.forEach((col) => {
-        const count = (row.scales && row.scales[col]) || 0;
-        const isCellActive =
-          analyticsFilter.denomination === row.denomination &&
-          analyticsFilter.scale === col;
-        const isEmpty = count === 0;
-
-        html += `
-          <td class="crosstab-cell ${isEmpty ? "empty" : ""} ${isCellActive ? "active" : ""}"
-              ${!isEmpty ? `onclick="setAnalyticsCellFilter('${escapeHtml(row.denomination)}', '${escapeHtml(col)}')"` : ""}
-              title="${!isEmpty ? `클릭 시 [${escapeHtml(row.denomination)} × ${escapeHtml(col)}] (${count}건) 드릴다운` : ""}">
-            ${count > 0 ? count : "-"}
-          </td>`;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td style="text-align:center"><span class="badge" style="${rankBadgeStyle};width:24px;display:inline-block">${rank}</span></td>
+          <td style="font-weight:700">${escapeHtml(c.church_name)}</td>
+          <td><span class="badge" style="background:#f1f5f9">${escapeHtml(c.denomination || "정통")}</span></td>
+          <td>${escapeHtml(c.pastor || "담임목사")}</td>
+          <td style="font-weight:700;color:var(--primary)">${c.congregation_size ? c.congregation_size.toLocaleString() + "명" : '<span style="color:var(--text-muted)">미입력</span>'}</td>
+          <td><span class="badge" style="background:#e0f2fe;color:#0369a1">${escapeHtml(c.scale_tier || "-")}</span></td>
+          <td>
+            <span class="copyable-cell" onclick="copySingleAddress('${escapeJs(c.road_address)}')" title="클릭 시 주소 복사">
+              ${escapeHtml(c.road_address || "-")}
+            </span>
+          </td>
+          <td style="font-size:12px">${escapeHtml(c.phone || "-")}</td>
+          <td>
+            ${c.homepage ? `<a href="${sanitizeUrl(c.homepage)}" target="_blank" style="color:var(--primary);font-size:12px">바로가기 🔗</a>` : '<span style="color:var(--text-muted);font-size:12px">-</span>'}
+          </td>
+        `;
+        top10Tbody.appendChild(tr);
       });
-
-      html += `
-        <td class="crosstab-total-col ${isRowActive ? "active" : ""}"
-            onclick="setAnalyticsFilter('denomination', '${escapeHtml(row.denomination)}')"
-            title="클릭 시 [${escapeHtml(row.denomination)}] 교단 전체 필터링">
-          ${row.total}
-        </td>`;
-      html += `</tr>`;
-    });
+    }
   }
 
-  html += `</tbody><tfoot><tr class="crosstab-total-row"><td>규모별 합계</td>`;
-  columns.forEach((col) => {
-    const isColActive = analyticsFilter.scale === col;
-    const total = colTotals[col] || 0;
-    html += `
-      <td class="crosstab-total-col ${isColActive ? "active" : ""}"
-          onclick="setAnalyticsFilter('scale', '${escapeHtml(col)}')"
-          title="클릭 시 [${escapeHtml(col)}] 규모 전체 필터링">
-        ${total}
-      </td>`;
-  });
-  html += `<td>${grandTotal}</td></tr></tfoot>`;
+  // 5. 해당 지역 전체 교회 데이터 그리드
+  const gridTitle = document.getElementById("region-grid-title");
+  if (gridTitle) gridTitle.innerText = regionLabel;
 
-  table.innerHTML = html;
+  renderGridTableRows(grid);
 }
 
-function renderActiveFilterChips() {
-  const container = document.getElementById("analytics-active-filter-chips");
-  if (!container) return;
-
-  container.innerHTML = "";
-  const filters = [
-    { key: "region", label: "지역", val: analyticsFilter.region },
-    { key: "denomination", label: "교단", val: analyticsFilter.denomination },
-    { key: "scale", label: "규모", val: analyticsFilter.scale },
-  ];
-
-  filters.forEach((f) => {
-    if (f.val && f.val !== "전체") {
-      const chip = document.createElement("span");
-      chip.className = "filter-chip";
-      chip.innerHTML = `
-        <span>${f.label}: <strong>${escapeHtml(f.val)}</strong></span>
-        <span class="chip-remove" title="필터 해제">&times;</span>
-      `;
-      chip.querySelector(".chip-remove").onclick = (e) => {
-        e.stopPropagation();
-        analyticsFilter[f.key] = "전체";
-        if (f.key === "region") {
-          const regionSelect = document.getElementById("analytics-region-select");
-          if (regionSelect) regionSelect.value = "전체";
-        }
-        renderAnalytics();
-      };
-      container.appendChild(chip);
-    }
+function filterAndRenderGrid(keyword) {
+  if (!keyword) {
+    renderGridTableRows(currentGridChurches);
+    return;
+  }
+  const kw = keyword.toLowerCase();
+  const filtered = currentGridChurches.filter((c) => {
+    return (
+      (c.church_name && c.church_name.toLowerCase().includes(kw)) ||
+      (c.pastor && c.pastor.toLowerCase().includes(kw)) ||
+      (c.denomination && c.denomination.toLowerCase().includes(kw)) ||
+      (c.road_address && c.road_address.toLowerCase().includes(kw)) ||
+      (c.scale_tier && c.scale_tier.toLowerCase().includes(kw))
+    );
   });
+  renderGridTableRows(filtered);
 }
 
-function renderDrilldownTable(churches, count) {
-  const badge = document.getElementById("analytics-drilldown-badge");
-  if (badge) badge.innerText = `${count}건 조회됨`;
-
-  const tbody = document.getElementById("analytics-drilldown-tbody");
+function renderGridTableRows(churches) {
+  const tbody = document.getElementById("region-grid-tbody");
   if (!tbody) return;
 
-  if (churches.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="10" style="text-align:center;color:var(--text-muted);padding:30px">
-          선택된 조건에 해당하는 교회가 없습니다.
-        </td>
-      </tr>
-    `;
+  tbody.innerHTML = "";
+  if (!churches || churches.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:30px">해당 조건의 교회가 없습니다.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = "";
   churches.forEach((c, idx) => {
-    const scale = classifyScaleFrontend(c.congregation_size);
-    const scaleColor = SCALE_COLORS[scale] || "var(--text-muted)";
     const tr = document.createElement("tr");
-
     tr.innerHTML = `
-      <td style="color:var(--text-muted);font-size:12px">${idx + 1}</td>
-      <td style="font-weight:600">${escapeHtml(c.church_name || "")}</td>
-      <td>${escapeHtml(c.pastor || "")}</td>
-      <td><span class="badge" style="background:#f1f5f9;color:var(--text-main)">${escapeHtml(c.denomination || "미지정")}</span></td>
-      <td>${escapeHtml(c.region || "-")}</td>
-      <td style="font-weight:600">${c.congregation_size ? c.congregation_size.toLocaleString() + "명" : '<span style="color:var(--text-muted)">미입력</span>'}</td>
-      <td>
-        <span class="badge" style="background:${scaleColor}18;color:${scaleColor};font-weight:600">
-          ${escapeHtml(scale)}
-        </span>
-      </td>
-      <td>
-        <span class="badge ${c.tier === "A" ? "badge-verified" : "badge-manual"}">
-          ${escapeHtml(c.tier || "-")}
-        </span>
-      </td>
-      <td style="font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(c.road_address || c.address || "")}">
-        ${escapeHtml(c.road_address || c.address || "-")}
-      </td>
       <td style="text-align:center">
-        <button class="btn btn-secondary btn-sm" onclick="copyDrilldownRecordText(${c.row_id})">
-          📋 복사
-        </button>
+        <input type="checkbox" class="region-grid-checkbox" data-id="${c.id}" aria-label="선택">
       </td>
+      <td style="color:var(--text-muted);font-size:12px;text-align:center">${idx + 1}</td>
+      <td style="font-weight:600">${escapeHtml(c.church_name)}</td>
+      <td><span class="badge" style="background:#f1f5f9">${escapeHtml(c.denomination || "-")}</span></td>
+      <td>${escapeHtml(c.pastor || "-")}</td>
+      <td style="font-weight:600">${c.congregation_size ? c.congregation_size.toLocaleString() + "명" : '<span style="color:var(--text-muted)">-</span>'}</td>
+      <td><span class="badge" style="background:#f8fafc;border:1px solid var(--border)">${escapeHtml(c.scale_tier || "-")}</span></td>
+      <td>
+        <span class="copyable-cell" onclick="copySingleAddress('${escapeJs(c.road_address)}')" title="클릭 시 주소 복사">
+          ${escapeHtml(c.road_address || "-")}
+        </span>
+      </td>
+      <td style="font-size:12px;color:var(--text-muted)">${escapeHtml(c.zip_code || "-")}</td>
+      <td style="font-size:12px">${escapeHtml(c.phone || "-")}</td>
     `;
     tbody.appendChild(tr);
   });
 }
 
-function copyDrilldownRecordText(rowId) {
-  const target = masterRecords.find((r) => r.row_id === rowId);
-  if (!target) {
-    showToast("교회 정보를 찾을 수 없습니다.");
-    return;
+// --- Phase 6: System Settings Logic ---
+
+function setupSettings() {
+  const kakaoInput = document.getElementById("settings-kakao-api-key");
+  const naverInput = document.getElementById("settings-naver-api-key");
+  const btnSave = document.getElementById("btn-save-settings");
+
+  if (kakaoInput && kakaoApiKey) kakaoInput.value = kakaoApiKey;
+  if (naverInput && naverApiKey) naverInput.value = naverApiKey;
+
+  if (btnSave) {
+    btnSave.addEventListener("click", () => {
+      if (kakaoInput) {
+        kakaoApiKey = kakaoInput.value.trim();
+        localStorage.setItem("CHURCH_HUB_KAKAO_API_KEY", kakaoApiKey);
+      }
+      if (naverInput) {
+        naverApiKey = naverInput.value.trim();
+        localStorage.setItem("CHURCH_HUB_NAVER_API_KEY", naverApiKey);
+      }
+      const vaultInput = document.getElementById("settings-obsidian-path");
+      if (vaultInput) {
+        obsidianVaultPath = vaultInput.value.trim();
+        if (window.pywebview) {
+          callApi("set_obsidian_vault_path", obsidianVaultPath);
+        }
+      }
+      showToast("환경설정이 저장되었습니다.");
+    });
   }
-  const text = `${target.church_name} (${target.pastor} 목사) / ${target.road_address || target.address || "주소 미등록"}`;
-  navigator.clipboard.writeText(text).then(
-    () => showToast(`클립보드 복사 완료: ${target.church_name}`),
-    () => showToast("클립보드 복사에 실패했습니다.")
-  );
-}
-
-function calculateMockAnalytics(records, filter) {
-  const region = filter.region;
-  const denom = filter.denomination;
-  const scale = filter.scale;
-
-  // 1. Regional records
-  let regional = records;
-  if (region && region !== "전체") {
-    regional = records.filter((r) => r.region === region);
-  }
-
-  // 2. Summary
-  const knownSizes = regional
-    .map((r) => r.congregation_size)
-    .filter((s) => s && s > 0);
-  const totalMembers = knownSizes.reduce((acc, v) => acc + v, 0);
-  const avgMembers = knownSizes.length ? Math.round(totalMembers / knownSizes.length) : 0;
-  const maxMembers = knownSizes.length ? Math.max(...knownSizes) : 0;
-  const minMembers = knownSizes.length ? Math.min(...knownSizes) : 0;
-
-  const summary = {
-    total_churches: regional.length,
-    total_members: totalMembers,
-    avg_members: avgMembers,
-    max_members: maxMembers,
-    min_members: minMembers,
-    entered_count: knownSizes.length,
-    missing_count: regional.length - knownSizes.length,
-    entered_ratio: regional.length
-      ? Math.round((knownSizes.length / regional.length) * 1000) / 10
-      : 0,
-  };
-
-  // 3. Regional breakdown
-  const regMap = {};
-  records.forEach((r) => {
-    const reg = r.region || "미지정";
-    regMap[reg] = (regMap[reg] || 0) + 1;
-  });
-  const regionalBreakdown = Object.keys(regMap).map((k) => ({
-    region: k,
-    church_count: regMap[k],
-    ratio: Math.round((regMap[k] / records.length) * 1000) / 10,
-  }));
-
-  // 4. Denominations
-  const denomMap = {};
-  regional.forEach((r) => {
-    const d = r.denomination || "미지정";
-    denomMap[d] = (denomMap[d] || 0) + 1;
-  });
-  const denominationDistribution = Object.keys(denomMap).map((k) => ({
-    name: k,
-    count: denomMap[k],
-    ratio: regional.length ? Math.round((denomMap[k] / regional.length) * 1000) / 10 : 0,
-  }));
-
-  // 5. Scales
-  const scaleMap = {};
-  SCALE_CATEGORIES_LIST.forEach((s) => (scaleMap[s] = 0));
-  regional.forEach((r) => {
-    const s = classifyScaleFrontend(r.congregation_size);
-    scaleMap[s] = (scaleMap[s] || 0) + 1;
-  });
-  const scaleDistribution = SCALE_CATEGORIES_LIST.map((s) => ({
-    scale: s,
-    count: scaleMap[s],
-    ratio: regional.length ? Math.round((scaleMap[s] / regional.length) * 1000) / 10 : 0,
-  }));
-
-  // 6. Crosstab
-  const allDenoms = Array.from(new Set(regional.map((r) => r.denomination || "미지정")));
-  const matrix = {};
-  const colTotals = {};
-  SCALE_CATEGORIES_LIST.forEach((s) => (colTotals[s] = 0));
-  allDenoms.forEach((d) => {
-    matrix[d] = {};
-    SCALE_CATEGORIES_LIST.forEach((s) => (matrix[d][s] = 0));
-  });
-
-  regional.forEach((r) => {
-    const d = r.denomination || "미지정";
-    const s = classifyScaleFrontend(r.congregation_size);
-    matrix[d][s] = (matrix[d][s] || 0) + 1;
-    colTotals[s] = (colTotals[s] || 0) + 1;
-  });
-
-  const rows = allDenoms.map((d) => {
-    const total = SCALE_CATEGORIES_LIST.reduce((sum, s) => sum + matrix[d][s], 0);
-    return { denomination: d, scales: matrix[d], total: total };
-  });
-
-  const crosstab = {
-    columns: SCALE_CATEGORIES_LIST,
-    rows: rows,
-    column_totals: colTotals,
-    grand_total: regional.length,
-  };
-
-  // 7. Drilldown churches
-  let churches = records;
-  if (region && region !== "전체") {
-    churches = churches.filter((r) => r.region === region);
-  }
-  if (denom && denom !== "전체") {
-    churches = churches.filter((r) => (r.denomination || "미지정") === denom);
-  }
-  if (scale && scale !== "전체") {
-    churches = churches.filter((r) => classifyScaleFrontend(r.congregation_size) === scale);
-  }
-
-  return {
-    summary: summary,
-    regional_breakdown: regionalBreakdown,
-    denomination_distribution: denominationDistribution,
-    scale_distribution: scaleDistribution,
-    crosstab: crosstab,
-    churches: churches,
-    drilldown_count: churches.length,
-    applied_filters: { region, denomination: denom, scale },
-  };
 }
 
 // --- Phase 5: Obsidian Smart Sync Logic ---
@@ -1624,3 +2028,23 @@ function showToast(msg) {
     }, 2800);
   }
 }
+
+// --- Clipboard & String Helpers ---
+
+function escapeJs(str) {
+  if (!str) return "";
+  return str.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
+window.copySingleAddress = function (addressStr) {
+  if (!addressStr) {
+    showToast("복사할 주소 정보가 없습니다.");
+    return;
+  }
+  navigator.clipboard.writeText(addressStr).then(() => {
+    showToast(`주소가 복사되었습니다: ${addressStr}`);
+  }).catch((err) => {
+    console.error("Clipboard copy failed:", err);
+    showToast("클립보드 복사에 실패했습니다.");
+  });
+};
