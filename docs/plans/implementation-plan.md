@@ -52,32 +52,36 @@
 - [x] Python 백엔드 ↔ JS 프론트엔드 간 양방향 IPC 통신 브릿지 (`src/bridge.py`)
 - [x] Phase 1 단위 테스트 및 Smoke 테스트 통과 (`tests/test_models.py`, `tests/test_bridge.py`)
 
-### Phase 2: 이원화 엑셀 엔진 & 공문/선물 퀵서처
-- [ ] `ExcelEngine` 구현 (`src/core/excel_engine.py`):
+### Phase 2: 이원화 엑셀 엔진 & 공문/선물 퀵서처 (완료)
+- [x] `ExcelEngine` 구현 (`src/core/excel_engine.py`):
   - **마스터 모드**: 사용자 구글 스프레드시트 17개 기본 컬럼 보존 및 서식/수식 손상 없는 입출력, 부가 컬럼(`우편번호`, `홈페이지`, `주소검증상태`, `홈페이지검증상태`, `Obsidian링크`) 자동 관리
   - **간편 주소록 모드**: 외부 사용자의 3개 헤더(`[담임목사, 지역, 교회명]`) 자동 인식 및 7개 정제 컬럼(`[교회명, 담임목사, 지역, 도로명 주소, 우편번호, 홈페이지, 검증 상태]`) 간이 엑셀/CSV 생성
   - 엑셀 파일 락 충돌 방지(임시 파일 원자적 교체 및 파일 열림 사전 감지)
-- [ ] `DispatchManager` 구현 (`src/core/dispatch.py`):
+- [x] `DispatchManager` 구현 (`src/core/dispatch.py`):
   - 교회명 초성 검색(`ㄱㅈㅅ` ➡️ 광주겨자씨교회) 및 목회자명 필터
   - 공문용 규격 텍스트 / 택배 선물용 규격 텍스트 / 스프레드시트용 TSV 원클릭 클립보드 복사
   - 선택 교회 일괄 발송용 미니 엑셀 다운로드
+- [x] Phase 2 단위 테스트 및 통합 브릿지 테스트 통과 (`tests/test_excel_engine.py`, `tests/test_dispatch.py`, `tests/test_bridge.py`)
 
-### Phase 3: 2단계 하이브리드 주소·홈페이지 추정기 & 대화형 Grounding 검증 UI
-- [ ] `AddressGrounder` 구현 (`src/core/grounder.py`):
+### Phase 3: 2단계 하이브리드 주소·홈페이지 추정기 & 대화형 Grounding 검증 UI (완료)
+- [x] `AddressGrounder` 구현 (`src/core/grounder.py`):
   - 1차: 무설정 웹 탐색(네이버 플레이스/포털)으로 도로명 주소 및 목회자 일치 스니펫 수집
   - 2차: `.env` 또는 설정에 카카오/네이버 API 등록 시 공식 API 고속 자동 전환
   - 신뢰도(Confidence) 산출: High (90%+), Medium (70~89%), Low (<70%)
-- [ ] `HomepageGrounder` 구현 (`src/core/homepage_grounder.py`):
+- [x] `HomepageGrounder` 구현 (`src/core/homepage_grounder.py`):
   - 포털 웹 검색을 통한 공식 웹사이트 수집 및 '오시는 길'/푸터 주소 파싱
   - **Cascading Uncertainty 알고리즘**: 1차 교회 주소가 불확실(`LOW`/미확정)하거나 사이트 내 주소 불일치 시, 홈페이지 신뢰도를 무조건 `LOW (검증 보류)`로 강제 강등
   - 1차 주소 확정 및 사이트 내 주소 일치 시에만 `HIGH (확정)` 부여
-- [ ] 대화형 Grounding 검증 뷰:
+  - SSRF 방지(사설/루프백 IP 차단) 및 DoS 메모리 스트리밍 상한(1MB) 내장
+- [x] 대화형 Grounding 검증 뷰 & 보안 하드닝:
   - 후보 도로명 주소, 우편번호, 포털 지도 바로가기 버튼 표시
   - 후보 홈페이지 URL, 사이트 미리보기 링크, "주소 불확실에 따른 홈페이지 검증 보류" 상태 배지 표시
   - `[원클릭 승인]`, `[주소/URL 직접 수정]`, `[보류]` 및 주소 수기 수정 시 [홈페이지 즉시 재평가] 연계 처리
+  - XSS 방지(DOM 이스케이프) 및 WCAG 2.2 AA 키보드 접근성 준수
+- [x] Phase 3 단위 테스트 및 브릿지/보안 테스트 37건 100% 통과 (`tests/test_grounder.py`, `tests/test_bridge.py`)
 
 ### Phase 4: 지역별 교세·교단·규모 분석 엔진 & 시각화 (User Requirements)
-- [ ] `AnalyticsEngine` 구현 (`src/core/analytics.py`):
+- [x] `AnalyticsEngine` 구현 (`src/core/analytics.py`):
   1. **지역별 기본 통계**:
      - 지역별 등록 교회 수, 총 성도 수, 평균 성도 수
   2. **지역별 교단(Denomination) 분포**:
@@ -92,19 +96,31 @@
      - *(성도 수 누락 교회: '규모 미입력' 카테고리)*
   4. **규모별 교회 수 및 분포도(Distribution)**:
      - 각 규모 구간별 교회 수(개) 및 비율(%) 산출
-     - 교단 × 규모 교차 집계표 (Cross-tabulation)
-- [ ] 인터랙티브 교세 대시보드 뷰 (`src/ui/analytics.html`):
-  - 지역별 규모 분포 누적 바 차트(Stacked Bar) 및 교단/규모 도넛 차트
-  - **드릴다운(Drill-down)**: 특정 지역/교단/규모 클릭 시 하단에 해당 교회 상세 목록(교회명, 담임목사, 성도 수, 교단, 관리등급, 주소) 즉시 필터링 표시
+     - 교단 × 규모 교차 집계표 (Cross-tabulation Matrix)
+- [x] 인터랙티브 교세 대시보드 뷰 (`src/ui/index.html`, `src/ui/js/app.js`, `src/ui/css/style.css`):
+  - 4대 요약 통계 카드(총 교회, 총 성도, 평균 성도, 입력률)
+  - 지역별/교단별/규모별 인터랙티브 막대 차트
+  - 교단 × 규모 교차 집계표 (Matrix Table): 셀 클릭 시 해당 조건 실시간 드릴다운
+  - **드릴다운(Drill-down)**: 활성 필터 칩 표시 및 상세 교회 목록(교회명, 담임목사, 교단, 규모 세그먼트, 관리등급, 주소, 원클릭 복사) 실시간 필터링
+- [x] Phase 4 단위 테스트 및 브릿지/스모크 테스트 45건 100% 통과 (`tests/test_analytics.py`, `tests/test_bridge.py`, `src/main.py --smoke-test`)
 
 ### Phase 5: 옵시디언 ↔ 엑셀 스마트 동기화 모드
-- [ ] `ObsidianBridge` 구현 (`src/sync/obsidian_bridge.py`):
-  - 설정에서 `볼트 경로` 지정 시 활성화
+- [x] `ObsidianBridge` 구현 (`src/sync/obsidian_bridge.py`):
+  - 설정에서 `볼트 경로` 지정 시 활성화 및 상태 검증
+  - **Frontmatter 및 본문 보존**: Dataview 쿼리나 본문 텍스트 손상 없는 엄격한 YAML 파싱/직렬화
   - **Diff 대조 및 해결**: 엑셀 ↔ 옵시디언 Frontmatter 불일치 시 사용자 선택(엑셀 기준 / 옵시디언 기준)
   - **상호 보완 (Gap-fill)**: 엑셀 신규 교회 ➡️ `20. Churches/{교회명}.md` 템플릿 자동 생성, 옵시디언 신규 교회 ➡️ 엑셀 행 추가 제안
   - 엑셀 내 `obsidian://` 딥링크 자동 생성
+- [x] 옵시디언 스마트 동기화 UI 구축 (`src/ui/index.html`, `src/ui/js/app.js`, `src/ui/css/style.css`):
+  - 볼트 연결 상태 및 4대 KPI 카드 (In-Sync, Diffs, 볼트 누락, 엑셀 누락)
+  - 정보 불일치 대조 및 원클릭 해결 카드 UI
+  - 누락 노트 개별/일괄 자동 생성 UI
+  - 옵시디언 전용 교회 엑셀 가져오기 UI
+- [x] Phase 5 단위 테스트 및 브릿지/스모크 테스트 55건 100% 통과 (`tests/test_obsidian_sync.py`, `src/main.py --smoke-test`)
 
 ### Phase 6: 포터블 윈도우 `.exe` 패키징 및 최종 검증
-- [ ] PyInstaller 스펙 파일 (`church_partner_hub.spec`) 구성 (웹 정적 에셋 번들링, 경량화)
-- [ ] 단일 실행 파일 빌드 및 무설치 환경 실행 테스트
-- [ ] 회귀 테스트 및 사용자 매뉴얼 작성
+- [x] PyInstaller 스펙 파일 (`church_partner_hub.spec`) 구성 (웹 정적 에셋 번들링, WebView2 런타임 호환, 불필요 패키지 제외 경량화)
+- [x] 원클릭 빌드 스크립트 작성 (`scripts/build_exe.py`, `scripts/build_exe.bat`)
+- [x] 종합 사용자 매뉴얼 작성 (`docs/USER_MANUAL.md`) 및 README 빠른 시작 가이드 갱신
+- [x] 전체 회귀 테스트 55종 100% 통과 및 스모크 테스트 무결성 검증 (`tests/`, `src/main.py --smoke-test`)
+

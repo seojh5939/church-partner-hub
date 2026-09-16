@@ -44,8 +44,40 @@
 - [x] 서비스 상세 기획안 및 기술 설계지침서 (SOLID, YAGNI, 2~3회 확장성) 확정
 - [x] 작업 워크플로우 지침서 및 GitHub Actions CI/CD 파이프라인 구성
 - [x] **Phase 1: 기반 구조 및 UI 셸 구축 완료** (`pywebview`, 도메인 모델, IPC 브릿지, 단위 테스트 통과)
-- [ ] **Phase 2: 이원화 엑셀 엔진 & 공문/선물 퀵서처 구현** (작업 예정)
-- [ ] **Phase 3: 2단계 하이브리드 주소·홈페이지 연계 Grounding 엔진 구현**
-- [ ] **Phase 4: 지역별 교세·교단·5단계 규모 분석 대시보드 구현**
-- [ ] **Phase 5: 옵시디언 ↔ 엑셀 스마트 동기화 구현**
-- [ ] **Phase 6: 포터블 윈도우 `.exe` 빌드 및 자동 릴리즈**
+- [x] **Phase 2: 이원화 엑셀 엔진 & 공문/선물 퀵서처 구현 완료** (PR #1 머지)
+- [x] **Phase 3: 2단계 하이브리드 주소·홈페이지 연계 Grounding & 종속적 불확실성 엔진 완료** (PR #2 머지)
+- [x] **Phase 4: 지역별 교세·교단·5단계 규모 분석 & 교차 집계 대시보드 완료** (PR #3 머지)
+- [x] **Phase 5: 옵시디언 ↔ 엑셀 스마트 동기화 및 템플릿 기반 Gap-fill 완료** (PR #4 머지)
+- [x] **Phase 6: 포터블 윈도우 `.exe` 패키징 사양 구성 & 사용자 매뉴얼 작성 완료**
+
+---
+
+## 🚀 빠른 시작 (Quick Start)
+
+### 1. 개발 환경 실행
+```powershell
+# 패키지 설치
+pip install -r requirements.txt
+
+# 앱 실행 (pywebview 데스크톱 GUI)
+python src/main.py
+
+# 무결성 스모크 테스트
+python src/main.py --smoke-test
+
+# 전체 단위 테스트 실행 (55종 100% PASS)
+python -m pytest -v
+```
+
+### 2. 포터블 윈도우 `.exe` 빌드
+별도의 파이썬 설치 없이 배포/사용 가능한 단일 실행 파일을 빌드할 수 있습니다:
+```powershell
+.\scripts\build_exe.bat
+# 또는
+python scripts/build_exe.py
+```
+생성된 실행 파일은 `dist/church-partner-hub.exe`에 위치합니다.
+
+### 3. 사용자 가이드
+상세한 기능별 사용법은 [**사용자 매뉴얼 (`docs/USER_MANUAL.md`)**](file:///C:/Users/20260602/Documents/github/church-partner-hub/docs/USER_MANUAL.md)을 참조하세요.
+

@@ -36,7 +36,8 @@
     <button class="tab-item active" data-tab="tab-dashboard">📊 대시보드</button>
     <button class="tab-item" data-tab="tab-grounding">🔍 주소 & 홈페이지 검증</button>
     <button class="tab-item" data-tab="tab-quick">⚡ 공문/선물 퀵서처</button>
-    <button class="tab-item" id="tab-btn-analytics" data-tab="tab-analytics">📈 지역별 교세 분석</button>
+    <button class="tab-item" id="tab-btn-analytics" data-tab="tab-analytics">🗺️ 전국 교세 지도 & 상세 분석</button>
+    <button class="tab-item" id="tab-btn-obsidian" data-tab="tab-obsidian">🔮 옵시디언 동기화</button>
     <button class="tab-item" data-tab="tab-settings">⚙️ 환경 설정</button>
   </nav>
 
@@ -66,13 +67,19 @@
 
       <div class="card">
         <div class="card-header">
-          <div class="card-title">교회 목록 데이터 테이블</div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-secondary btn-sm" id="btn-export-excel">📥 엑셀 내보내기</button>
+          <div>
+            <div class="card-title">교회 목록 데이터 테이블</div>
+            <div id="loaded-file-indicator" style="font-size:12px;color:var(--text-muted);margin-top:2px">현재 파일: 열린 파일 없음 (엑셀 파일을 열어주세요)</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-secondary btn-sm" id="btn-open-excel">📂 파일 열기 (.xlsx/.csv)</button>
+            <button class="btn btn-secondary btn-sm" id="btn-save-excel">💾 저장</button>
+            <button class="btn btn-secondary btn-sm" id="btn-export-excel">📥 내보내기</button>
             <button class="btn btn-primary btn-sm" id="btn-batch-grounding">⚡ 미검증 일괄 추정</button>
           </div>
         </div>
-        <div class="table-wrapper">
+        <div id="dashboard-empty-hero"></div>
+        <div class="table-wrapper" id="dashboard-table-wrapper">
           <table>
             <thead>
               <tr id="table-header-row"></tr>
@@ -113,57 +120,356 @@
     <!-- 3. 공문/선물 퀵서처 탭 -->
     <section class="tab-panel" id="tab-quick">
       <div class="card">
-        <div style="margin-bottom:16px">
-          <div style="font-size:16px;font-weight:700;margin-bottom:4px">공문/선물 발송 퀵서처</div>
-          <div style="font-size:13px;color:var(--text-muted)">교회명, 초성(예: ㄱㅈㅅ), 담임목사명으로 실시간 검색하여 원클릭으로 클립보드에 복사합니다.</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="font-size:16px;font-weight:700;margin-bottom:4px">공문/선물 발송 퀵서처</div>
+            <div style="font-size:13px;color:var(--text-muted)">교회명, 초성(예: ㄱㅈㅅ), 담임목사명으로 검색하여 주소를 원클릭으로 복사합니다.</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary btn-sm" id="btn-copy-selected-dispatch">📋 선택 주소 일괄 복사</button>
+            <button class="btn btn-primary btn-sm" id="btn-export-dispatch">📥 발송 명단 엑셀 다운로드</button>
+          </div>
         </div>
-        <input type="text" id="quick-search-input" class="search-input" placeholder="교회명 초성(ㄱㅈㅅ) 또는 목회자명 검색...">
+        <input type="text" id="quick-search-input" class="search-input" placeholder="교회명 초성(ㄱㅈㅅ) 또는 목회자명 검색..." aria-label="교회명 및 목회자명 퀵 검색">
       </div>
 
       <div id="quick-search-results"></div>
     </section>
 
-    <!-- 4. 지역별 교세 분석 탭 (마스터 모드 전용) -->
+    <!-- 4. 전국 정통교단 교세 지도 & 지역 분석 탭 -->
     <section class="tab-panel" id="tab-analytics">
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">지역별 교단 및 5단계 규모(성도 수) 분포 분석</div>
-          <select id="analytics-region-select" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px">
-            <option value="전체">전체 지역</option>
-            <option value="광주">광주</option>
-            <option value="서울">서울</option>
-            <option value="경기">경기</option>
-          </select>
+      <!-- 상단 컨트롤 바 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header" style="flex-wrap:wrap;gap:12px">
+          <div>
+            <div class="card-title">🗺️ 전국 정통교단 교세 지도 & 지역 상세 분석</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:4px">
+              기준: <strong>교회114 (ch114.kr, 현대종교)</strong> 공인 10대 정통 교단 DB | 이단/사이비 원천 배제
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <select id="analytics-sido-select" aria-label="시도 선택" style="padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;background:var(--bg-card)">
+              <option value="전체">전국 (17개 시도)</option>
+            </select>
+            <select id="analytics-sigungu-select" aria-label="시군구 선택" style="padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;background:var(--bg-card)">
+              <option value="전체">시군구 전체</option>
+            </select>
+            <select id="analytics-emd-select" aria-label="읍면동 선택" style="padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;background:var(--bg-card)">
+              <option value="전체">읍면동 전체</option>
+            </select>
+            <button class="btn btn-primary btn-sm" id="btn-fetch-web-churches" title="API Key 없이도 인터넷(교회114 웹/정통교단 공개 데이터)에서 실시간으로 정통교단 데이터를 수집하여 분석 DB를 채웁니다">
+              🌐 인터넷 정통교단 불러오기
+            </button>
+            <button class="btn btn-secondary btn-sm" id="btn-import-church-file" title="보유하신 교회 엑셀(.xlsx) 또는 CSV 파일을 교세 분석 DB로 직접 가져옵니다">
+              📂 교세 파일 가져오기
+            </button>
+            <input type="file" id="church114-file-input" accept=".xlsx,.xls,.csv" style="display:none">
+            <button class="btn btn-secondary btn-sm" id="btn-refresh-portal-churches" title="환경설정에 등록된 카카오/네이버 API Key로 해당 지역의 최신 교세를 재조사합니다">
+              🔑 API 포털 재조사
+            </button>
+            <button class="btn btn-secondary btn-sm" id="btn-reset-analytics-filter">
+              초기화
+            </button>
+          </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:16px">
-          <div class="grounding-box">
-            <div class="box-title">⛪ 지역별 교단 구성비</div>
-            <div id="analytics-denom-list"></div>
+        <!-- 지도 그래픽 뷰 (마커 핀 X, 줌/선택 연동 밀도 단계구분도) -->
+        <div style="margin-top:16px;position:relative">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-size:14px;font-weight:700" id="map-current-view-title">
+              📍 대한민국 17개 광역시도 정통교단 교세 밀집도 (클릭 시 해당 시도로 줌인)
+            </div>
+            <!-- 범례 (Legend) -->
+            <div style="display:flex;align-items:center;gap:12px;font-size:12px;color:var(--text-muted)">
+              <span>밀집도:</span>
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#3b82f6"></span> 소수</span>
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#06b6d4"></span> 보통</span>
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#f97316"></span> 밀집</span>
+              <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#ef4444"></span> 초밀집</span>
+            </div>
           </div>
-          <div class="grounding-box">
-            <div class="box-title">📊 5단계 규모별(성도 수) 세그먼트</div>
-            <div id="analytics-scale-list"></div>
+
+          <!-- 벡터 지도 캔버스 컨테이너 -->
+          <div id="orthodox-density-map-container" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;height:460px;position:relative;overflow:hidden">
+            <svg id="orthodox-map-svg" width="100%" height="100%" viewBox="0 0 540 680" style="display:block;margin:auto"></svg>
+            <div id="map-hover-tooltip" style="position:absolute;display:none;pointer-events:none;background:rgba(15,23,42,0.92);color:white;padding:8px 12px;border-radius:6px;font-size:12px;line-height:1.5;z-index:10;box-shadow:0 4px 6px rgba(0,0,0,0.15)"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 지역 교세 상세 분석 페이지 (클릭 시 모든 지표 제공) -->
+      <div id="region-detail-section">
+        <!-- 4대 요약 통계 카드 -->
+        <div class="analytics-summary-grid" id="region-summary-cards" style="margin-bottom:16px">
+          <div class="stat-card">
+            <div class="stat-label">선택 지역 교회 수</div>
+            <div class="stat-value" id="region-total-churches">0개</div>
+            <div class="stat-sub" id="region-scope-label">전국 기준</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">총 성도 수 합계</div>
+            <div class="stat-value" id="region-total-members">0명</div>
+            <div class="stat-sub">공인 등록 기준</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">평균 성도 수</div>
+            <div class="stat-value" id="region-avg-members">0명</div>
+            <div class="stat-sub">교회당 평균</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">1위 점유 교단</div>
+            <div class="stat-value" id="region-top-denomination">-</div>
+            <div class="stat-sub" id="region-top-denom-ratio">점유율 0.0%</div>
+          </div>
+        </div>
+
+        <!-- 2컬럼: 교단별 상세 점유율 & 5단계 규모 분포 -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div class="card" style="padding:16px">
+            <div class="card-title" style="margin-bottom:12px">⛪ 교단별 상세 점유율 현황</div>
+            <div id="region-denom-breakdown-list"></div>
+          </div>
+          <div class="card" style="padding:16px">
+            <div class="card-title" style="margin-bottom:12px">📊 성도 수 5단계 규모별 분포</div>
+            <div id="region-scale-breakdown-list"></div>
+          </div>
+        </div>
+
+        <!-- 해당 지역 [성도 수 상위 TOP 10 랭킹 카드] -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div>
+              <div class="card-title">🏆 <span id="region-top10-title">전국</span> 성도 수 상위 TOP 10 거점 교회</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                해당 지역의 교세를 주도하는 대표 10개 교회 상세 정보 (주소 클릭 시 원클릭 복사)
+              </div>
+            </div>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:50px;text-align:center">순위</th>
+                  <th>교회명</th>
+                  <th>교단</th>
+                  <th>담임목사</th>
+                  <th>성도 수</th>
+                  <th>규모분류</th>
+                  <th>도로명 주소 (클릭 시 복사)</th>
+                  <th>대표연락처</th>
+                  <th>공식 홈페이지</th>
+                </tr>
+              </thead>
+              <tbody id="region-top10-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 해당 지역 전체 교회 데이터 그리드 -->
+        <div class="card">
+          <div class="card-header" style="flex-wrap:wrap;gap:12px">
+            <div>
+              <div class="card-title">📋 <span id="region-grid-title">전국</span> 전체 교회 데이터 그리드</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                주소를 클릭하면 클립보드에 즉시 복사됩니다.
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="text" id="region-grid-search-input" placeholder="교회명, 목회자, 주소 검색..." style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:200px">
+              <button class="btn btn-secondary btn-sm" id="btn-copy-grid-selected">📋 선택 주소 일괄 복사</button>
+              <button class="btn btn-secondary btn-sm" id="btn-export-grid-excel">📥 엑셀 다운로드</button>
+            </div>
+          </div>
+          <div class="table-wrapper" style="max-height:380px;overflow-y:auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:40px;text-align:center"><input type="checkbox" id="grid-select-all" aria-label="전체 선택"></th>
+                  <th style="width:45px">No</th>
+                  <th>교회명</th>
+                  <th>교단</th>
+                  <th>담임목사</th>
+                  <th>성도 수</th>
+                  <th>규모</th>
+                  <th>도로명 주소 (클릭 시 복사)</th>
+                  <th>우편번호</th>
+                  <th>연락처</th>
+                </tr>
+              </thead>
+              <tbody id="region-grid-tbody"></tbody>
+            </table>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- 5. 환경 설정 탭 -->
+    <!-- 5. 옵시디언 스마트 동기화 탭 (마스터 모드 전용) -->
+    <section class="tab-panel" id="tab-obsidian">
+      <!-- 볼트 연결 상태 헤더 카드 -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:16px;font-weight:700">🔮 옵시디언 ↔ 엑셀 스마트 동기화 스튜디오</span>
+              <span class="badge" id="obsidian-status-badge" style="background:var(--success-light);color:var(--success);font-weight:700">
+                연결 확인 중...
+              </span>
+            </div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:4px" id="obsidian-vault-path-display">
+              볼트 경로: 확인 중...
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn btn-secondary btn-sm" id="btn-recheck-obsidian">
+              🔄 볼트 재스캔 & Diff 분석
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="document.querySelector('[data-tab=tab-settings]').click()">
+              ⚙️ 볼트 경로 설정
+            </button>
+          </div>
+        </div>
+
+        <!-- 볼트 동기화 4대 요약 KPI -->
+        <div class="analytics-summary-grid" style="margin-top:16px">
+          <div class="stat-card">
+            <div class="stat-label">상호 일치 (In-Sync)</div>
+            <div class="stat-value" id="obs-kpi-sync" style="color:var(--success)">0건</div>
+            <div class="stat-sub">엑셀 ⇋ 볼트 정보 완벽 일치</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">정보 불일치 (Diffs)</div>
+            <div class="stat-value" id="obs-kpi-diff" style="color:var(--warning)">0건</div>
+            <div class="stat-sub">필드별 대조 및 해결 필요</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">볼트 누락 (엑셀 ➡️ 볼트)</div>
+            <div class="stat-value" id="obs-kpi-missing-vault" style="color:var(--primary)">0건</div>
+            <div class="stat-sub">마크다운 노트 자동 생성 가능</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">엑셀 누락 (볼트 ➡️ 엑셀)</div>
+            <div class="stat-value" id="obs-kpi-missing-excel" style="color:#8b5cf6">0건</div>
+            <div class="stat-sub">엑셀 마스터 행 추가 제안</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 서브 섹션 1: 정보 불일치 해결 (Diff Resolution) -->
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <div style="font-size:15px;font-weight:700">⚡ 정보 불일치 대조 & 상호 해결 (Diff Resolution)</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+              엑셀과 옵시디언의 정보가 다른 항목입니다. 적용하고자 하는 기준(엑셀 또는 옵시디언)을 선택하여 즉시 동기화합니다.
+            </div>
+          </div>
+        </div>
+        <div id="obsidian-diff-list" style="display:flex;flex-direction:column;gap:12px">
+          <div style="text-align:center;color:var(--text-muted);padding:24px">
+            Diff 분석 중입니다...
+          </div>
+        </div>
+      </div>
+
+      <!-- 서브 섹션 2: 누락 노트 생성 (엑셀 ➡️ 옵시디언 Gap-fill) -->
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-size:15px;font-weight:700">📝 볼트 누락 교회 노트 자동 생성 (엑셀 ➡️ 옵시디언)</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+              엑셀에는 등록되어 있으나 옵시디언 <code>20. Churches</code>에 없는 교회입니다. 템플릿 기반으로 노트를 자동 생성합니다.
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btn-create-all-missing-notes">
+            ⚡ 누락 노트 전체 일괄 자동 생성
+          </button>
+        </div>
+        <div class="table-container" style="max-height:280px;overflow-y:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:45px">No</th>
+                <th>교회명</th>
+                <th>담임목사</th>
+                <th>교단</th>
+                <th>지역</th>
+                <th>성도 수</th>
+                <th>관리 등급</th>
+                <th style="width:110px;text-align:center">액션</th>
+              </tr>
+            </thead>
+            <tbody id="obsidian-missing-vault-tbody">
+              <tr>
+                <td colspan="8" style="text-align:center;color:var(--text-muted);padding:20px">
+                  데이터를 불러오는 중입니다...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 서브 섹션 3: 엑셀 행 추가 제안 (옵시디언 ➡️ 엑셀 Gap-fill) -->
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <div style="font-size:15px;font-weight:700">📥 옵시디언 전용 교회 엑셀 가져오기 (옵시디언 ➡️ 엑셀)</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+              옵시디언 볼트에는 있으나 엑셀 마스터시트에 없는 교회입니다. 원클릭으로 엑셀 새 행으로 등록합니다.
+            </div>
+          </div>
+        </div>
+        <div class="table-container" style="max-height:280px;overflow-y:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:45px">No</th>
+                <th>교회명</th>
+                <th>담임목사</th>
+                <th>교단</th>
+                <th>지역</th>
+                <th>관리 등급</th>
+                <th style="width:130px;text-align:center">액션</th>
+              </tr>
+            </thead>
+            <tbody id="obsidian-missing-excel-tbody">
+              <tr>
+                <td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">
+                  데이터를 불러오는 중입니다...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. 환경 설정 탭 -->
     <section class="tab-panel" id="tab-settings">
       <div class="card">
         <div class="card-title" style="margin-bottom:16px">시스템 환경 설정</div>
-        <div style="display:flex;flex-direction:column;gap:16px;max-width:540px">
+        <div style="display:flex;flex-direction:column;gap:16px;max-width:560px">
           <div>
-            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">옵시디언 볼트 경로</label>
-            <input type="text" value="C:\Users\20260602\Documents\github\Obsidian" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px">
+            <label for="settings-obsidian-path" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">옵시디언 볼트 경로</label>
+            <input id="settings-obsidian-path" type="text" value="C:\Users\20260602\Documents\github\Obsidian" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px">
           </div>
           <div>
-            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">지도 API 키 (선택 사항 - 미등록 시 포털 웹 탐색)</label>
-            <input type="password" placeholder="Kakao / Naver Cloud API Key" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px">
+            <label for="settings-kakao-api-key" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">
+              카카오 REST API 키 (선택 사항 - 교회 최신 교세 재조사용)
+            </label>
+            <input id="settings-kakao-api-key" type="password" placeholder="카카오 개발자 콘솔 REST API 키 입력" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px">
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px">
+              키를 입력하면 '최신 교세 재조사' 실행 시 카카오 로컬 검색을 통해 신규 교회를 자동 수집 및 정통교단 DB에 반영합니다.
+            </div>
           </div>
           <div>
-            <button class="btn btn-primary" onclick="showToast('설정이 저장되었습니다.')">설정 저장</button>
+            <label for="settings-naver-api-key" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">
+              네이버 클라우드 API Key (Client ID:Secret)
+            </label>
+            <input id="settings-naver-api-key" type="password" placeholder="예: ClientID:ClientSecret" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px">
+          </div>
+          <div>
+            <button class="btn btn-primary" id="btn-save-settings">설정 저장</button>
           </div>
         </div>
       </div>
@@ -172,8 +478,9 @@
   </main>
 
   <!-- Toast Notification -->
-  <div id="toast">알림 메시지</div>
+  <div id="toast" role="status" aria-live="polite">알림 메시지</div>
 
+  <script src="js/korea_map_data.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

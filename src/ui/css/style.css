@@ -359,3 +359,268 @@ tr:hover {
   opacity: 1;
   transform: translateY(0);
 }
+
+/* --- Phase 4 Analytics & Cross-tabulation Styling --- */
+.analytics-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+@media (max-width: 960px) {
+  .analytics-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.analytics-bar-item {
+  margin-bottom: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.analytics-bar-item:hover {
+  background: #f1f5f9;
+  transform: translateX(2px);
+}
+.analytics-bar-item.active {
+  background: var(--primary-light);
+  outline: 1px solid var(--primary);
+}
+
+/* Cross-tabulation Matrix Table */
+.crosstab-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: var(--bg-card);
+}
+.crosstab-table th,
+.crosstab-table td {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+}
+.crosstab-table th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: var(--text-main);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.crosstab-header-clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.crosstab-header-clickable:hover {
+  background: #e2e8f0;
+  color: var(--primary);
+}
+.crosstab-header-clickable.active {
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 700;
+}
+.crosstab-row-title {
+  text-align: left !important;
+  font-weight: 600;
+  background: #fafafa;
+  cursor: pointer;
+  user-select: none;
+}
+.crosstab-row-title:hover {
+  background: #f1f5f9;
+  color: var(--primary);
+}
+.crosstab-row-title.active {
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 700;
+}
+.crosstab-cell {
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+.crosstab-cell:hover:not(.empty) {
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+.crosstab-cell.active {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+.crosstab-cell.empty {
+  color: #cbd5e1;
+  cursor: default;
+}
+.crosstab-total-col {
+  font-weight: 700;
+  background: #f8fafc;
+  cursor: pointer;
+}
+.crosstab-total-col:hover {
+  background: #e2e8f0;
+  color: var(--primary);
+}
+.crosstab-total-row td {
+  font-weight: 700;
+  background: #f1f5f9;
+}
+
+/* Filter Chip */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #e0f2fe;
+  color: #0369a1;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #bae6fd;
+}
+.filter-chip .chip-remove {
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  color: #0284c7;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.filter-chip .chip-remove:hover {
+  background: #0284c7;
+  color: white;
+}
+
+/* --- Phase 5: Obsidian Sync & Diff Card Styling --- */
+.obsidian-diff-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 18px;
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.obsidian-diff-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 8px;
+}
+
+.obsidian-diff-compare-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 6px;
+}
+
+.obsidian-diff-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.obsidian-diff-val {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: white;
+  word-break: break-all;
+}
+
+.obsidian-diff-val.excel {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.obsidian-diff-val.obsidian {
+  border-color: #d8b4fe;
+  background: #faf5ff;
+  color: #7e22ce;
+}
+
+/* --- Hero Empty State & Onboarding UX --- */
+.hero-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  text-align: center;
+  margin: 20px 0;
+  transition: all 0.2s ease;
+}
+
+.hero-empty-state:hover {
+  border-color: var(--primary);
+  background: #f1f5f9;
+}
+
+.hero-empty-icon {
+  font-size: 54px;
+  margin-bottom: 16px;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.05));
+}
+
+.hero-empty-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.hero-empty-desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  max-width: 520px;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.hero-empty-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Click-to-copy hover interaction */
+.copyable-cell {
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.copyable-cell:hover {
+  background: var(--primary-light) !important;
+  color: var(--primary) !important;
+}
+.copyable-cell:active {
+  transform: scale(0.99);
+}
+
+

@@ -11,6 +11,9 @@ jobs:
   check-and-release:
     name: Check Version & Publish GitHub Release
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
 
     steps:
       - name: Checkout Code

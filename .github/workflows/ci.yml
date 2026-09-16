@@ -10,6 +10,9 @@ jobs:
   test:
     name: Run Unit Tests & Smoke Test
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
 
     steps:
       - name: Checkout Code

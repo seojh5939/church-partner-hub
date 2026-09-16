@@ -4,12 +4,23 @@ import os
 import sys
 from pathlib import Path
 
+# Windows 콘솔 및 CI 환경 UTF-8 인코딩 보장
+if sys.platform == "win32":
+    try:
+        if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # Add project root to sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.bridge import ChurchBridge
+from src.core.models import ChurchRecord, SimpleAddressRecord
 
 
 def get_ui_path() -> str:
@@ -31,13 +42,203 @@ def main() -> None:
     """데스크톱 앱 실행."""
     # Smoke-test CLI 모드 지원 (CI 또는 테스트 환경용)
     if "--smoke-test" in sys.argv:
-        print("[Smoke-Test] Initializing ChurchBridge...")
+        print("[Smoke-Test] Initializing ChurchBridge and Core Engines...")
         bridge = ChurchBridge()
-        state = bridge.get_initial_state()
-        assert state["success"] is True
-        print(f"[Smoke-Test] Successfully loaded {len(state['data']['master_records'])} master records.")
+        initial_state = bridge.get_initial_state()
+        assert initial_state["success"] is True
+        # Verify Zero-Seed Data Governance: initial state must be 100% empty
+        assert len(initial_state["data"]["master_records"]) == 0
+        assert len(initial_state["data"]["simple_records"]) == 0
+        assert initial_state["data"]["stats"]["total_count"] == 0
+        print("[Smoke-Test] Zero-Seed Data verified: Production starts 100% clean with 0 records.")
         print(f"[Smoke-Test] UI Entrypoint verified at: {get_ui_path()}")
-        print("[Smoke-Test] All Phase 1 components operational.")
+
+        # Inject isolated test records for downstream component smoke testing
+        bridge.master_records = [
+            ChurchRecord(
+                row_id=1,
+                region="광주",
+                classification="이사교회",
+                church_name="광주겨자씨교회",
+                pastor="나학수",
+                address="광주광역시 남구 봉선로 12",
+                denomination="예장합동",
+                congregation_size=3500,
+                tier="A",
+                temperature="Hot",
+                management_type="본부집중",
+                primary_campaign="희망친구 결연",
+                primary_campaign_date="2026-03-15",
+                campaign_status="제안완료",
+                followup_campaign="국내위기가정지원",
+                next_action="추진위원회 방문 미팅",
+                next_contact_date="2026-09-25",
+                remarks="담임목사님 창립기념 선물 발송 완료",
+                zip_code="61642",
+                homepage="http://www.mustardseed.or.kr",
+                verification_status="승인완료",
+                homepage_status="확인완료",
+            ),
+            ChurchRecord(
+                row_id=2,
+                region="광주",
+                classification="타겟교회",
+                church_name="광주동성교회",
+                pastor="안성주",
+                address="",
+                denomination="예장통합",
+                congregation_size=800,
+                tier="B",
+                temperature="Warm",
+                management_type="지역본부",
+                primary_campaign="긴급구호",
+                primary_campaign_date="2026-05-10",
+                campaign_status="검토중",
+                followup_campaign="우물파기",
+                next_action="자료 이메일 발송",
+                next_contact_date="2026-09-20",
+                remarks="주소 확인 후 공문 발송 요청",
+                zip_code="",
+                homepage="",
+                verification_status="미검증",
+                homepage_status="미검증",
+            ),
+            ChurchRecord(
+                row_id=3,
+                region="서울",
+                classification="후원교회",
+                church_name="영락교회",
+                pastor="김운성",
+                address="서울특별시 중구 수표로 33",
+                denomination="예장통합",
+                congregation_size=12000,
+                tier="A",
+                temperature="Hot",
+                management_type="본부집중",
+                primary_campaign="식수지원",
+                primary_campaign_date="2026-01-20",
+                campaign_status="확정",
+                followup_campaign="보건의료",
+                next_action="분기 결과보고서 전달",
+                next_contact_date="2026-10-01",
+                remarks="대표 전화 및 부속기관 연계",
+                zip_code="04551",
+                homepage="https://www.youngnak.net",
+                verification_status="승인완료",
+                homepage_status="확인완료",
+            ),
+            ChurchRecord(
+                row_id=4,
+                region="경기",
+                classification="타겟교회",
+                church_name="하남샘물교회",
+                pastor="이철희",
+                address="",
+                denomination="백석",
+                congregation_size=250,
+                tier="C",
+                temperature="Cold",
+                management_type="일반",
+                primary_campaign="아동결연",
+                primary_campaign_date="2026-07-01",
+                campaign_status="보류",
+                followup_campaign="",
+                next_action="차기 컨택",
+                next_contact_date="2026-11-10",
+                remarks="동명 교회 확인 필요",
+                zip_code="",
+                homepage="",
+                verification_status="미검증",
+                homepage_status="미검증",
+            ),
+        ]
+        bridge.simple_records = [
+            SimpleAddressRecord(
+                row_id=1,
+                church_name="광주겨자씨교회",
+                pastor="나학수",
+                region="광주",
+                road_address="광주광역시 남구 봉선로 12",
+                zip_code="61642",
+                homepage="http://www.mustardseed.or.kr",
+                address_status="확인완료",
+                homepage_status="확인완료",
+            ),
+            SimpleAddressRecord(
+                row_id=2,
+                church_name="광주동성교회",
+                pastor="안성주",
+                region="광주",
+                road_address="",
+                zip_code="",
+                homepage="",
+                address_status="미검증",
+                homepage_status="미검증",
+            ),
+        ]
+        state = bridge.get_initial_state()
+        print(f"[Smoke-Test] Injected {len(state['data']['master_records'])} test records for downstream checks.")
+
+        # Phase 2 component smoke test
+        search_res = bridge.quick_search("ㄱㅈㅅ")
+        assert search_res["success"] is True
+        assert len(search_res["data"]["results"]) == 1
+        c_name = search_res["data"]["results"][0]["church_name"]
+        print(f"[Smoke-Test] DispatchManager Chosung Search verified: found '{c_name}'.")
+
+        # Phase 3 component smoke test (Grounding & Cascading Uncertainty)
+        addr_res = bridge.search_address(2, mode="MASTER")
+        assert addr_res["success"] is True and len(addr_res["data"]["candidates"]) > 0
+        print(f"[Smoke-Test] AddressGrounder verified: {len(addr_res['data']['candidates'])} candidates found.")
+
+        hp_res = bridge.search_homepage(2, mode="MASTER")
+        assert hp_res["success"] is True
+        cand = hp_res["data"]["candidate"]
+        assert cand["is_dependent_uncertain"] is True and cand["confidence_level"] == "LOW"
+        print("[Smoke-Test] HomepageGrounder & Cascading Uncertainty policy verified.")
+
+        # Phase 4 component smoke test (AnalyticsEngine, Crosstab & Drilldown)
+        analytics_res = bridge.get_analytics()
+        assert analytics_res["success"] is True
+        analytics_data = analytics_res["data"]
+        assert analytics_data["summary"]["total_churches"] == len(state["data"]["master_records"])
+        assert "crosstab" in analytics_data
+        assert analytics_data["crosstab"]["grand_total"] == len(state["data"]["master_records"])
+        assert len(analytics_data["denomination_distribution"]) > 0
+        assert len(analytics_data["scale_distribution"]) == 6
+
+        # Phase 4 Drill-down verification
+        drilldown_res = bridge.get_analytics(denomination_filter="예장합동")
+        assert drilldown_res["success"] is True
+        assert drilldown_res["data"]["drilldown_count"] > 0
+        assert all(c["denomination"] == "예장합동" for c in drilldown_res["data"]["churches"])
+        print(f"[Smoke-Test] AnalyticsEngine & Drilldown verified: {analytics_data['summary']['total_churches']} churches, {len(analytics_data['crosstab']['rows'])} denominations.")
+
+        # Phase 5 component smoke test (ObsidianBridge Smart Sync)
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp_vault:
+            t_path = Path(temp_vault)
+            (t_path / "90. Templates").mkdir(parents=True, exist_ok=True)
+            (t_path / "20. Churches").mkdir(parents=True, exist_ok=True)
+            (t_path / "90. Templates" / "Template - Church (교회_조직).md").write_text(
+                "---\ntype: church\npastor: ''\n---\n# {{title}}\n\n## 🏢 개요\n",
+                encoding="utf-8",
+            )
+            obs_status = bridge.check_obsidian_status(temp_vault)
+            assert obs_status["success"] is True and obs_status["data"]["valid"] is True
+
+            # Create note test
+            note_res = bridge.create_obsidian_note(1, vault_path=temp_vault)
+            assert note_res["success"] is True
+            assert Path(note_res["data"]["file_path"]).exists()
+
+            # Diff test
+            diff_res = bridge.diff_obsidian(temp_vault)
+            assert diff_res["success"] is True
+            assert diff_res["data"]["in_sync_count"] >= 1
+            print(f"[Smoke-Test] ObsidianBridge verified: created note '{note_res['data']['church_name']}', link='{note_res['data']['obsidian_link']}'.")
+
+        print("[Smoke-Test] All Phase 1, 2, 3, 4 & 5 components operational.")
         return
 
     import webview  # type: ignore
